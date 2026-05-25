@@ -1,1 +1,14 @@
+[theme]
+# 전체 테마를 다크 모드로 강제 고정
+base="dark"
 
+# 체크박스, 선택된 메뉴 등의 기본 포인트 컬러 (퍼플 블루 톤)
+primaryColor="#818cf8"
+
+# 배경색을 아주 딥한 네이비 톤으로 설정 (완전 까만색보다 훨씬 고급스럽습니다)
+backgroundColor="#0f172a"
+secondaryBackgroundColor="#1e293b"
+
+# 글자색
+textColor="#f8fafc"
+font="sans serif"
