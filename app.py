@@ -1,7 +1,7 @@
 """
-쉬운 문서 해석기 — PRO 최종 통합본 (절대 고정 레이아웃)
-- UX 개선 1: 창을 줄여도 우측 사진이 밑으로 떨어지지 않게(줄바꿈 방지) 강제 고정
-- UX 개선 2: 좌측 텍스트/로그인 구역 420px 절대 크기 고정 
+쉬운 문서 해석기 — PRO 최종 통합본 (진짜 절대 고정 레이아웃)
+- UX 개선: 스트림릿의 억지 반응형(자동 리사이징)을 flex 속성으로 강제 무력화
+- 로그인 화면: 좌측 420px, 우측 850px 완전 고정 (브라우저를 줄이면 가로 스크롤만 생김)
 """
 import docx  
 import io    
@@ -19,7 +19,7 @@ st.set_page_config(
     layout="wide",
 )
 
-# 세션 초기화는 무조건 최상단에서 가장 먼저 실행!
+# 세션 초기화
 if "user" not in st.session_state:
     st.session_state["user"] = None
 if "interpret_cache" not in st.session_state:
@@ -27,25 +27,12 @@ if "interpret_cache" not in st.session_state:
 
 st.markdown("""
 <style>
-    /* 🚀 스트림릿 특유의 맘대로 줄바꿈(밑으로 떨어지는 현상) 앱 전체 차단 */
-    [data-testid="stHorizontalBlock"] {
-        flex-wrap: nowrap !important;
-    }
-
-    /* 전체 배경: 은은한 딥 네이비 고정 & 가로 스크롤 허용 */
-    .stApp { background-color: #0f172a; overflow-x: auto; }
-    
-    /* 우측 상단 깃허브, 별 아이콘 등 불필요한 툴바 숨기기 */
+    .stApp { background-color: #0f172a; overflow-x: auto !important; }
     [data-testid="stToolbar"] { visibility: hidden !important; }
-    
-    /* 사이드바 강제 고정 (<< 버튼 유지 및 자동 접힘 방지) */
     [data-testid="stSidebar"] { min-width: 300px !important; }
-    
     h1 { background: linear-gradient(90deg, #d8b4fe, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
-    
     button[kind="primary"] { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important; border: none !important; color: white !important; font-weight: 600 !important; border-radius: 8px !important; box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4) !important; transition: all 0.3s ease !important; }
     button[kind="primary"]:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(168, 85, 247, 0.6) !important; }
-    
     [data-testid="stVerticalBlock"] > div > div { border-radius: 12px; }
     div[data-testid="stContainer"] { border: 1px solid rgba(255, 255, 255, 0.1) !important; background-color: rgba(30, 41, 59, 0.4) !important; backdrop-filter: blur(10px); }
     [data-testid="stFileUploadDropzone"] { border: 2px dashed rgba(129, 140, 248, 0.5) !important; background-color: rgba(15, 23, 42, 0.3) !important; border-radius: 12px !important; }
@@ -101,41 +88,50 @@ def show_pricing_modal():
                 st.link_button("Pro 구독하기", final_checkout_link, type="primary", use_container_width=True)
 
 # ============================================================
-# 🔒 3. API 키 설정 및 로그인 시스템 (레이아웃 강제 고정)
+# 🔒 3. API 키 설정 및 로그인 시스템 (절대 크기 강제 고정)
 # ============================================================
 SUPABASE_URL = "https://nufvazmyuvhqkeysfwla.supabase.co"
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 MODEL_NAME = "gemini-3.1-flash-lite" 
 
 if st.session_state["user"] is None:
+    # 💡 [핵심] 로그인 화면에서만 작동하는 '절대 크기 강제 고정' 핵(Hack)
     st.markdown("""
     <style>
-        /* 1. 브라우저 폭이 줄어도 전체 컨테이너는 1400px 유지 */
+        /* 1. 전체 블록 컨테이너 최소 너비 1300px 강제 고정 */
         [data-testid="block-container"] {
-            min-width: 1400px !important;
+            min-width: 1300px !important;
+            max-width: 1300px !important;
             padding-top: 5vh !important;
         }
         
-        /* 2. 좌측 텍스트/로그인 구역 (붉은색 박스 사이즈로 절대 찌그러지지 않게 강제 고정) */
-        [data-testid="column"]:nth-of-type(1) {
+        /* 2. 컬럼 자동 줄바꿈 완전 차단 */
+        [data-testid="stHorizontalBlock"] {
+            flex-wrap: nowrap !important;
+            gap: 3rem !important;
+        }
+        
+        /* 3. 좌측 구역(텍스트/로그인): 무조건 420px 고정 (스트림릿 반응형 무시) */
+        [data-testid="column"]:nth-child(1) {
+            width: 420px !important;
             min-width: 420px !important;
             max-width: 420px !important;
-            flex: 0 0 420px !important; /* flex 크기 강제 고정 */
+            flex: 0 0 420px !important; 
             border-right: 1px solid rgba(255, 255, 255, 0.15);
-            padding-right: 3.5rem !important;
+            padding-right: 3rem !important;
         }
         
-        /* 3. 우측 스크린샷 구역 (화면 밖으로 나가도 우측에 버티게 고정) */
-        [data-testid="column"]:nth-of-type(2) {
+        /* 4. 우측 구역(사진): 무조건 850px 고정 (스트림릿 반응형 무시) */
+        [data-testid="column"]:nth-child(2) {
+            width: 850px !important;
             min-width: 850px !important;
-            flex: 1 0 850px !important;
-            padding-left: 1rem !important;
+            max-width: 850px !important;
+            flex: 0 0 850px !important;
         }
         
-        /* 4. 스크린샷 테두리 센스있게 마감 (희미한 글로우) */
+        /* 스크린샷 테두리 마감 */
         [data-testid="stImage"] img {
             border-radius: 12px;
             border: 1px solid rgba(255, 255, 255, 0.2);
@@ -144,7 +140,7 @@ if st.session_state["user"] is None:
     </style>
     """, unsafe_allow_html=True)
 
-    col_left, col_right = st.columns([1, 2.5], gap="large")
+    col_left, col_right = st.columns(2)
     
     with col_left:
         st.markdown("<div style='margin-top: 5vh;'></div>", unsafe_allow_html=True)
