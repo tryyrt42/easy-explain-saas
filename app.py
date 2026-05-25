@@ -1,7 +1,7 @@
 """
-쉬운 문서 해석기 — PRO 최종 통합본 (진짜 절대 고정 레이아웃)
-- UX 개선: 스트림릿의 억지 반응형(자동 리사이징)을 flex 속성으로 강제 무력화
-- 로그인 화면: 좌측 420px, 우측 850px 완전 고정 (브라우저를 줄이면 가로 스크롤만 생김)
+쉬운 문서 해석기 — PRO 최종 통합본 (스트림릿 반응형 강제 무력화 및 수직선 적용)
+- 레이아웃 고정: flex 속성을 활용해 좌측 420px 강제 고정, 우측 최소 850px 방어
+- 디자인 엣지: 좌우를 가르는 은은한 수직선(Divider) 완벽 적용
 """
 import docx  
 import io    
@@ -19,7 +19,6 @@ st.set_page_config(
     layout="wide",
 )
 
-# 세션 초기화
 if "user" not in st.session_state:
     st.session_state["user"] = None
 if "interpret_cache" not in st.session_state:
@@ -88,7 +87,7 @@ def show_pricing_modal():
                 st.link_button("Pro 구독하기", final_checkout_link, type="primary", use_container_width=True)
 
 # ============================================================
-# 🔒 3. API 키 설정 및 로그인 시스템 (절대 크기 강제 고정)
+# 🔒 3. API 키 설정 및 로그인 시스템 (레이아웃 시멘트 고정!)
 # ============================================================
 SUPABASE_URL = "https://nufvazmyuvhqkeysfwla.supabase.co"
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
@@ -97,45 +96,40 @@ GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 MODEL_NAME = "gemini-3.1-flash-lite" 
 
 if st.session_state["user"] is None:
-    # 💡 [핵심] 로그인 화면에서만 작동하는 '절대 크기 강제 고정' 핵(Hack)
+    # 💡 [핵심] 로그인 화면 전용: 스트림릿 반응형을 짓밟는 무적의 CSS
     st.markdown("""
     <style>
-        /* 1. 전체 블록 컨테이너 최소 너비 1300px 강제 고정 */
-        [data-testid="block-container"] {
-            min-width: 1300px !important;
-            max-width: 1300px !important;
-            padding-top: 5vh !important;
-        }
-        
-        /* 2. 컬럼 자동 줄바꿈 완전 차단 */
-        [data-testid="stHorizontalBlock"] {
+        /* 1. 컬럼들을 묶는 가로 블록이 절대 줄바꿈하지 않게, 너비 1350px 고정 */
+        div[data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
-            gap: 3rem !important;
+            min-width: 1350px !important; 
+            gap: 0px !important; /* 자체 간격을 없애고 패딩으로 조절 */
         }
         
-        /* 3. 좌측 구역(텍스트/로그인): 무조건 420px 고정 (스트림릿 반응형 무시) */
-        [data-testid="column"]:nth-child(1) {
+        /* 2. 좌측 텍스트/로그인 폼: 420px 강제 고정 및 은은한 수직선 추가 */
+        div[data-testid="column"]:first-child {
             width: 420px !important;
             min-width: 420px !important;
             max-width: 420px !important;
             flex: 0 0 420px !important; 
-            border-right: 1px solid rgba(255, 255, 255, 0.15);
-            padding-right: 3rem !important;
+            
+            /* ✨ 용규님이 원하신 바로 그 은은한 수직선! */
+            border-right: 1px solid rgba(255, 255, 255, 0.25) !important;
+            padding-right: 40px !important;
+            margin-right: 40px !important; /* 선과 오른쪽 사진 사이의 간격 */
         }
         
-        /* 4. 우측 구역(사진): 무조건 850px 고정 (스트림릿 반응형 무시) */
-        [data-testid="column"]:nth-child(2) {
-            width: 850px !important;
+        /* 3. 우측 스크린샷 뷰어: 850px 강제 고정 */
+        div[data-testid="column"]:nth-child(2) {
             min-width: 850px !important;
-            max-width: 850px !important;
-            flex: 0 0 850px !important;
+            flex: 1 1 850px !important;
         }
         
-        /* 스크린샷 테두리 마감 */
+        /* 4. 스크린샷 테두리 센스있게 마감 (희미한 글로우) */
         [data-testid="stImage"] img {
             border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0px 4px 40px rgba(129, 140, 248, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            box-shadow: 0px 4px 40px rgba(129, 140, 248, 0.35) !important;
         }
     </style>
     """, unsafe_allow_html=True)
