@@ -49,13 +49,24 @@ st.markdown("""
         height: 0 !important;
     }
     
-    /* === 🚨 우측 상단 잔존 요소들 (toolbarMode='minimal'이 못 잡는 것들만 백업으로) === */
-    /* ⚠️ stToolbar 자체는 절대 건드리지 않음! 사이드바 토글이 그 안에 있어서 같이 사라짐 */
+    /* === 🚨 우측 상단 Streamlit Cloud 버튼들 (Share/⭐/Edit/GitHub) 정밀 타격 === */
+    /* ⚠️ stToolbar 부모는 안 건드림 (사이드바 토글 영향 없음) */
+    /* stToolbarActions만 숨김 — 여기에 Share, Star, Edit, GitHub 다 들어있음 */
+    [data-testid="stToolbarActions"] {
+        display: none !important;
+    }
+    
+    /* 백업: Streamlit Cloud의 viewerBadge 계열 (GitHub 별/링크) */
+    [class*="viewerBadge_container"],
+    [class*="viewerBadge_link"],
+    [class*="ViewerBadge"] {
+        display: none !important;
+    }
+    
+    /* Deploy 버튼류 */
     .stDeployButton,
     .stAppDeployButton,
-    [data-testid="stMainMenu"],
-    [class*="viewerBadge_container"],
-    [class*="viewerBadge_link"] {
+    [data-testid="stMainMenu"] {
         display: none !important;
     }
     
@@ -306,8 +317,8 @@ with top_left:
     )
 
 with top_right:
-    # 💡 margin-top 128px로 왼쪽 업로드 박스 밑바닥과 정확히 정렬
-    st.markdown("<div style='margin-top: 128px;'></div>", unsafe_allow_html=True) 
+    # 💡 margin-top 155px로 왼쪽 업로드 박스 밑바닥과 정확히 정렬
+    st.markdown("<div style='margin-top: 155px;'></div>", unsafe_allow_html=True) 
     with st.container(border=True):
         st.markdown("### 해석 컨트롤러")
         selected_mode = st.selectbox(
