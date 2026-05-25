@@ -158,6 +158,24 @@ st.markdown("""
         background-color: rgba(15, 23, 42, 0.3) !important;
         border-radius: 12px !important;
     }
+
+    /* 5. ✨ [핵심 추가] 움직이는 은은한 보랏빛 그라데이션 배경 ✨ */
+    /* 좌측 마케팅 존 및 주요 컬럼에 적용되어 꿀렁이는 효과를 줍니다 */
+    [data-testid="stColumn"]:first-child {
+        background: linear-gradient(-45deg, #0f172a, #3b0764, #1e3a8a, #020617);
+        background-size: 400% 400%;
+        animation: gradient_move 15s ease infinite;
+        border-radius: 12px;
+        padding: 2rem;
+        box-shadow: inset 0 0 20px rgba(0,0,0,0.5); /* 안쪽 그림자로 깊이감 추가 */
+    }
+
+    /* 그라데이션이 숨 쉬듯 움직이는 애니메이션 정의 */
+    @keyframes gradient_move {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
 </style>
 """, unsafe_allow_html=True)
 # 👆👆 커스텀 CSS 주입 끝 👆👆
