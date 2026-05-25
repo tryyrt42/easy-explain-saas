@@ -12,3 +12,11 @@ secondaryBackgroundColor="#1e293b"
 # 글자색
 textColor="#f8fafc"
 font="sans serif"
+
+[client]
+# 🔥 우측 상단 툴바 (Share, ⭐, GitHub) 완전 제거
+# minimal: 로딩 스피너만 남기고 다 숨김 (Streamlit 공식 방식 - 사이드바 영향 없음)
+toolbarMode = "minimal"
+
+# 에러 상세 정보 숨김 (운영 환경용)
+showErrorDetails = false
