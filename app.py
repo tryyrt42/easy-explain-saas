@@ -24,28 +24,44 @@ if "user" not in st.session_state:
 
 # 로그인되어 있지 않다면 로그인 화면만 보여주고 멈춤
 if st.session_state.user is None:
-    st.title("🔒 쉬운 문서 해석기 로그인")
-    st.write("서비스를 이용하려면 이메일을 입력해주세요.")
+    # 1. 화면 중앙에 배치하기 위해 양옆에 투명한 빈 공간(여백)을 만듭니다.
+    spacer_left, col_login, spacer_right = st.columns([1, 1.5, 1])
     
-    email_input = st.text_input("이메일 주소")
-    login_btn = st.button("시작하기")
-    
-    if login_btn and email_input:
-        # 1. DB에 유저가 있는지 확인
-        response = supabase.table("users").select("*").eq("email", email_input).execute()
+    with col_login:
+        # 위쪽에 여백을 줘서 수직 중앙 느낌을 냅니다.
+        st.markdown("<div style='margin-top: 15vh;'></div>", unsafe_allow_html=True)
         
-        if len(response.data) > 0:
-            # 2. 기존 가입자면 정보 가져오기
-            st.session_state.user = response.data[0]
-        else:
-            # 3. 처음 온 사람이면 DB에 새로 등록 (기본 FREE 플랜)
-            new_user = {"email": email_input, "plan_type": "FREE", "used_pages": 0}
-            insert_res = supabase.table("users").insert(new_user).execute()
-            st.session_state.user = insert_res.data[0]
+        # 2. 로그인 폼을 반투명한 유리 상자(Container) 안에 넣습니다.
+        with st.container(border=True):
+            st.markdown("<h1 style='text-align: center;'>📄 쉬운 문서 해석기</h1>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align: center; color: #94a3b8; font-size: 1.1rem; margin-bottom: 2rem;'>어려운 기술 문서를 가장 쉽게 이해하는 방법</p>", unsafe_allow_html=True)
             
-        st.success("✅ 로그인 성공!")
-        st.rerun()  # 화면을 새로고침해서 메인 앱으로 진입
-        
+            st.markdown("**👋 환영합니다! 서비스를 시작하려면 이메일을 입력해주세요.**")
+            
+            # 입력창을 깔끔하게 다듬고 안내 문구(placeholder)를 넣습니다.
+            email_input = st.text_input("이메일 주소", placeholder="example@email.com", label_visibility="collapsed")
+            
+            st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+            
+            # 3. 버튼에 type="primary"를 줘서 그라데이션을 입히고, 폭을 100%로 꽉 채웁니다.
+            login_btn = st.button("🚀 시작하기", type="primary", use_container_width=True)
+            
+            if login_btn and email_input:
+                # 1. DB에 유저가 있는지 확인
+                response = supabase.table("users").select("*").eq("email", email_input).execute()
+                
+                if len(response.data) > 0:
+                    # 2. 기존 가입자면 정보 가져오기
+                    st.session_state.user = response.data[0]
+                else:
+                    # 3. 처음 온 사람이면 DB에 새로 등록 (기본 FREE 플랜)
+                    new_user = {"email": email_input, "plan_type": "FREE", "used_pages": 0}
+                    insert_res = supabase.table("users").insert(new_user).execute()
+                    st.session_state.user = insert_res.data[0]
+                    
+                st.success("✅ 로그인 성공!")
+                st.rerun()  # 화면을 새로고침해서 메인 앱으로 진입
+                
     st.stop() # 로그인을 안 했으면 이 아래 코드(메인 앱)는 절대 실행되지 않음
 
 # ============================================================
@@ -197,9 +213,10 @@ PROMPT_TEMPLATES = {
 - 제약사항: 인사말, 서론, 뻔한 추임새 절대 금지. 바로 본론의 비유로 진입하세요.
 - 특징: 아무리 어려운 개념도 일상 개념에 찰떡같이 비유해서 직관적으로 이해되게 만들어 주세요.""",
 
-    "😎 촌철살인 동네 형 모드": """너는 산전수전 다 겪은 실무 에이스 선배입니다.
-- 톤앤매너: 친한 후배에게 핵심만 짚어주는 거침없고 직관적인 반말.
-- 제약사항: "야, 복잡하게 생각할 거 없고", "정신 똑바로 차려", "이게 왜 필요하냐면" 같은 억지스러운 유행어나 반복적인 추임새, 인사말은 절대 쓰지 마세요.
+    "😎 촌철살인 동네 형 모드": """너는 산전수전 다 겪은 실무 에이스 친한 동네 형입니다.
+- 톤앤매너: 아끼는 동생에게 알려주듯 핵심만 짚어주는 거침없고 직관적인 반말. 
+- 어투 제약사항(매우 중요): 딱딱한 명령조나 권위적인 말투(~해라, ~마라, ~한다)는 절대 금지합니다. 반드시 친근하고 자연스러운 구어체 말투(~해, ~야, ~하지 마, ~거야, ~거든)로 끝맺으세요.
+- 일반 제약사항: 억지스러운 유행어나 반복적인 추임새, 인사말은 절대 쓰지 마세요.
 - 특징: 복잡한 이론은 과감히 걷어내고, 실무에서 이 개념이 어떻게 작동하는지 뼈대만 날카롭게 팩트 폭격으로 꽂아주세요."""
 }
 
