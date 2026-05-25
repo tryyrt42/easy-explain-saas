@@ -1,8 +1,9 @@
 """
-쉬운 문서 해석기 — 사이드바 복구 + PPTX 지원 추가 버전
+쉬운 문서 해석기 — 사이드바 복구 버전
 - 🔧 수정 1: 랜딩 페이지의 min-width 1200px 누수로 사이드바가 화면 밖으로 밀려나던 버그 제거
 - 🔧 수정 2: 사이드바 강제 노출 CSS 추가 (구버전/신버전 Streamlit 모두 대응)
-- 🆕 추가: PPTX 파일 지원 (슬라이드 단위로 해석)
+- 🔧 수정 3: 우측 상단 툴바 정밀 제거 (stToolbarActions만 타겟)
+- 🔧 수정 4: 업로더 ↔ 컨트롤러 반응형 하단 정렬 (flex-end)
 """
 import docx  
 import io    
@@ -315,17 +316,16 @@ def build_prompt(text: str, mode: str) -> str:
 {text}"""
 
 # ============================================================
-# ⚙️ 7. 메인 화면: 파일 업로드 (PPTX 추가!)
+# ⚙️ 7. 메인 화면: 파일 업로드
 # ============================================================
 top_left, top_right = st.columns(2, gap="large")
 
 with top_left:
     st.title("📄 쉬운 문서 해석기")
     st.caption("어려운 기술 문서, 불필요한 사설 없이 핵심만 명확하게 짚어드립니다.")
-    # 🆕 PPTX 추가
     uploaded_file = st.file_uploader(
-        "문서 파일 업로드 (PDF, TXT, DOCX, PPTX)", 
-        type=["pdf", "txt", "docx", "pptx"]
+        "문서 파일 업로드 (PDF, TXT, DOCX)", 
+        type=["pdf", "txt", "docx"]
     )
 
 with top_right:
@@ -344,7 +344,7 @@ if uploaded_file is None:
     st.stop()
 
 # ============================================================
-# ⚙️ 8. 파일 파싱 — PPTX 처리 추가
+# ⚙️ 8. 파일 파싱
 # ============================================================
 file_id = f"{uploaded_file.name}_{uploaded_file.size}"
 file_ext = uploaded_file.name.split('.')[-1].lower()
@@ -361,59 +361,6 @@ if st.session_state.get("file_id") != file_id:
                 page_images.append(pix.tobytes("png"))
                 page_texts.append(page.get_text())
             doc.close()
-        
-        # 🆕 PPTX 처리 — LibreOffice로 PDF 변환 후 기존 PDF 로직 재사용
-        elif file_ext == "pptx":
-            import subprocess
-            import tempfile
-            import os
-            
-            with tempfile.TemporaryDirectory() as tmpdir:
-                # 1) 업로드된 PPTX를 임시 폴더에 저장
-                pptx_path = os.path.join(tmpdir, "input.pptx")
-                with open(pptx_path, "wb") as f:
-                    f.write(uploaded_file.read())
-                
-                # 2) LibreOffice headless로 PDF 변환 (서버에서 실행)
-                try:
-                    subprocess.run(
-                        [
-                            "libreoffice", "--headless",
-                            "--convert-to", "pdf",
-                            "--outdir", tmpdir,
-                            pptx_path
-                        ],
-                        check=True,
-                        capture_output=True,
-                        timeout=180  # 3분 타임아웃
-                    )
-                except FileNotFoundError:
-                    st.error("⚠️ LibreOffice 미설치. `packages.txt`에 `libreoffice` 한 줄 추가하고 재배포하세요.")
-                    st.stop()
-                except subprocess.TimeoutExpired:
-                    st.error("⚠️ 변환 시간 초과 (3분). 슬라이드가 너무 많거나 무거울 수 있어요.")
-                    st.stop()
-                except subprocess.CalledProcessError as e:
-                    st.error(f"⚠️ PPTX 변환 실패: {e.stderr.decode()[:200] if e.stderr else 'unknown error'}")
-                    st.stop()
-                
-                # 3) 변환된 PDF 읽기
-                pdf_path = os.path.join(tmpdir, "input.pdf")
-                if not os.path.exists(pdf_path):
-                    st.error("⚠️ 변환된 PDF 파일을 찾을 수 없습니다.")
-                    st.stop()
-                
-                with open(pdf_path, "rb") as f:
-                    pdf_bytes = f.read()
-                
-                # 4) PDF처럼 처리 — 이미지 + 텍스트 동시에 추출
-                doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-                for i in range(len(doc)):
-                    page = doc[i]
-                    pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
-                    page_images.append(pix.tobytes("png"))
-                    page_texts.append(page.get_text())
-                doc.close()
         
         else:
             # TXT / DOCX 처리
@@ -441,9 +388,7 @@ total_pages = st.session_state.get("total_pages", 1)
 page_images = st.session_state.get("page_images", [])
 page_texts = st.session_state.get("page_texts", [])
 
-# 🆕 PPTX는 '슬라이드'로 표기
-unit_label = "슬라이드" if file_ext == "pptx" else "페이지"
-st.success(f"✅ 총 {total_pages} {unit_label} 로드 완료")
+st.success(f"✅ 총 {total_pages} 페이지 로드 완료")
 st.divider()
 
 col_pdf, col_result = st.columns([1, 1], gap="large")
@@ -451,7 +396,7 @@ col_pdf, col_result = st.columns([1, 1], gap="large")
 with col_pdf:
     st.markdown(f"### {file_ext.upper()} 원본")
     view_page = st.number_input(
-        f"📄 이동할 {unit_label} 번호 입력", 
+        "📄 이동할 페이지 번호 입력", 
         min_value=1, max_value=total_pages, value=1, step=1
     )
     
@@ -459,7 +404,7 @@ with col_pdf:
         if page_images and page_images[view_page - 1] is not None:
             st.image(
                 page_images[view_page - 1], 
-                caption=f"━━━ {unit_label} {view_page} / {total_pages} ━━━", 
+                caption=f"━━━ 페이지 {view_page} / {total_pages} ━━━", 
                 use_container_width=True
             )
         elif page_texts:
@@ -487,7 +432,7 @@ with col_result:
     with btn_col:
         st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
         interpret_btn = st.button(
-            f"✨ 현재 {unit_label} 해석", 
+            "✨ 현재 페이지 해석", 
             type="primary" if not is_cached else "secondary", 
             use_container_width=True
         )
@@ -530,4 +475,4 @@ with col_result:
         if is_cached:
             st.markdown(st.session_state["interpret_cache"][cache_key])
         elif not interpret_btn:
-            st.info(f"👆 상단의 **[✨ 현재 {unit_label} 해석]** 버튼을 눌러주세요.")
+            st.info("👆 상단의 **[✨ 현재 페이지 해석]** 버튼을 눌러주세요.")
