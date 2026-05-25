@@ -1,8 +1,8 @@
 """
-쉬운 문서 해석기 — PRO 진짜 최종 통합본 (스트림릿 한계 극복판)
-- F5 새로고침 방어: st.query_params를 이용한 세션 유지 완벽 구현
-- UI 복구: 사이드바 토글 버튼 증발 버그 해결
-- 레이아웃 고정: 랜딩 페이지 좌측 400px 칼고정 / 메인 화면 컨트롤러 하단 정렬
+쉬운 문서 해석기 — PRO 최종 통합본 (사이드바 복구 & 에러 완전 차단)
+- 버그 수정 1: 사이드바 토글 버튼 증발 현상 해결 (stHeader 복구)
+- 버그 수정 2: session_state AttributeError 방지를 위해 .get() 메서드 전면 도입
+- 유지 사항: F5 새로고침 방어, 로그인 창 550px 고정, 컨트롤러 하단 정렬 유지
 """
 import docx  
 import io    
@@ -12,21 +12,27 @@ import google.generativeai as genai
 from supabase import create_client, Client
 
 # ============================================================
-# ⚙️ 1. 페이지 설정 (사이드바 확장 기본값 세팅)
+# ⚙️ 1. 페이지 설정 및 전역 스타일 주입
 # ============================================================
 st.set_page_config(
     page_title="쉬운 문서 해석기",
     page_icon="📄",
     layout="wide",
-    initial_sidebar_state="expanded" # 💡 사이드바 무조건 열어두기!
+    initial_sidebar_state="expanded" 
 )
 
-# 💡 독성 CSS 모두 걷어내고 필수 디자인만 남김 (사이드바 버튼 증발 방지)
+# 💡 안전한 세션 초기화
+if "user" not in st.session_state:
+    st.session_state["user"] = None
+if "interpret_cache" not in st.session_state:
+    st.session_state["interpret_cache"] = {}
+
+# 💡 전역 CSS (사이드바 버튼을 날려버리던 악성 헤더 숨김 코드 제거!)
 st.markdown("""
 <style>
-    .stApp { background-color: #0f172a; }
-    /* 상단 기본 툴바(Deploy, 깃허브 등)만 깔끔하게 제거 */
-    header[data-testid="stHeader"] { display: none !important; }
+    .stApp { background-color: #0f172a; overflow-x: hidden; }
+    /* 우측 상단 툴바(별모양, 깃허브)만 정확히 숨김 */
+    [data-testid="stToolbar"] { visibility: hidden !important; }
     
     h1 { background: linear-gradient(90deg, #d8b4fe, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
     button[kind="primary"] { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important; border: none !important; color: white !important; font-weight: 600 !important; border-radius: 8px !important; box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4) !important; transition: all 0.3s ease !important; }
@@ -46,13 +52,8 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 MODEL_NAME = "gemini-3.1-flash-lite" 
 
-if "user" not in st.session_state:
-    st.session_state["user"] = None
-if "interpret_cache" not in st.session_state:
-    st.session_state["interpret_cache"] = {}
-
-# 💡 F5를 눌러도 st.query_params에 이메일이 남아있으면 자동 로그인 처리!
-if st.session_state["user"] is None and "logged_in_email" in st.query_params:
+# 💡 F5를 눌러도 st.query_params에 이메일이 남아있으면 자동 로그인 처리
+if st.session_state.get("user") is None and "logged_in_email" in st.query_params:
     saved_email = st.query_params["logged_in_email"]
     response = supabase.table("users").select("*").eq("email", saved_email).execute()
     if len(response.data) > 0:
@@ -68,12 +69,14 @@ def show_pricing_modal():
     st.write("서비스의 무제한 기능을 경험해 보세요.")
     col_free, col_pro = st.columns(2)
 
+    user_info = st.session_state.get("user", {})
+
     with col_free:
         with st.container(height=420, border=True):
             st.subheader("FREE")
             st.markdown("## ₩ 0 / 월")
             st.markdown("""<div style='min-height: 180px; color: #94a3b8;'>✔️ <b>매월 3장</b> 해석 제공<br>✔️ 기본 문서 텍스트 추출<br>✔️ 일반 속도 처리</div>""", unsafe_allow_html=True)
-            if st.session_state["user"]['plan_type'] == 'FREE':
+            if user_info.get('plan_type') == 'FREE':
                 st.button("현재 이용 중", disabled=True, key="modal_free_btn", use_container_width=True)
             else:
                 st.button("FREE 플랜", disabled=True, key="modal_free_btn_dis", use_container_width=True)
@@ -84,40 +87,37 @@ def show_pricing_modal():
             st.markdown("## ₩ 9,900 / 월")
             st.markdown("""<div style='min-height: 180px; color: #94a3b8;'>✔️ <b>월 1,000장 해석 제공</b><br>✔️ 1타 강사 / 비유 모드 완벽 지원<br>✔️ 한도 초과 스트레스 없는 쾌적함</div>""", unsafe_allow_html=True)
             BASE_CHECKOUT_LINK = "https://easy-explain-saas.lemonsqueezy.com/checkout/buy/7a87b27c-335a-42c9-9995-54eb03fb49a3"
-            current_user_email = st.session_state["user"]['email']
+            current_user_email = user_info.get('email', '')
             final_checkout_link = f"{BASE_CHECKOUT_LINK}?checkout[email]={current_user_email}"
             
-            if st.session_state["user"]['plan_type'] == 'PRO':
+            if user_info.get('plan_type') == 'PRO':
                 st.button("현재 이용 중 (PRO)", disabled=True, key="modal_pro_btn", use_container_width=True)
-            elif st.session_state["user"]['plan_type'] == 'ADMIN':
+            elif user_info.get('plan_type') == 'ADMIN':
                 st.button("👑 마스터 계정 사용 중", disabled=True, key="modal_admin_btn", use_container_width=True)
             else:
                 st.link_button("Pro 구독하기", final_checkout_link, type="primary", use_container_width=True)
 
 # ============================================================
-# 🚪 4. 랜딩 페이지 (로그인 안 했을 때만 표시 - 400px 칼고정)
+# 🚪 4. 랜딩 페이지 (로그인 안 했을 때만 표시 - 550px 칼고정)
 # ============================================================
-if st.session_state["user"] is None:
+if st.session_state.get("user") is None:
     st.markdown("""
     <style>
-        /* 좌우 레이아웃 줄바꿈 방지 및 수직 중앙 정렬 */
         div[data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
             align-items: center !important;
             min-width: 1200px !important;
         }
-        /* 💡 좌측 400px 완벽 고정 & 수직선 추가 */
+        /* 좌측 550px 완벽 고정 & 수직선 추가 */
         div[data-testid="column"]:first-child {
-            flex: 0 0 400px !important; 
+            flex: 0 0 550px !important; 
             border-right: 1px solid rgba(255, 255, 255, 0.2);
             padding-right: 3rem !important;
         }
-        /* 우측 사진은 남는 공간 전부 차지 */
         div[data-testid="column"]:nth-child(2) {
             flex: 1 1 auto !important;
             padding-left: 3rem !important;
         }
-        /* 사진 테두리 네온 효과 */
         [data-testid="stImage"] img {
             border-radius: 12px;
             border: 1px solid rgba(255, 255, 255, 0.2);
@@ -157,19 +157,21 @@ if st.session_state["user"] is None:
         except:
             st.info("💡 여기에 결과물 스샷(result_preview.png)이 큼직하게 표시됩니다.")
             
-    st.stop() # 랜딩 페이지만 보여주고 아래 코드는 실행 안 함
+    st.stop() 
 
 # ============================================================
-# 👤 5. 유저 사이드바 (정상 작동 보장)
+# 👤 5. 유저 사이드바 (사라지지 않고 항상 대기 중!)
 # ============================================================
+user_data = st.session_state.get("user", {})
+
 with st.sidebar:
-    st.markdown(f"**👤 계정**: {st.session_state['user']['email']}")
-    st.markdown(f"**💳 플랜**: {st.session_state['user']['plan_type']}")
+    st.markdown(f"**👤 계정**: {user_data.get('email', '')}")
+    st.markdown(f"**💳 플랜**: {user_data.get('plan_type', '')}")
 
-    if st.session_state["user"]['plan_type'] == 'ADMIN':
-        st.markdown(f"**📄 사용량**: {st.session_state['user']['used_pages']} 장 (👑 무제한)")
+    if user_data.get('plan_type') == 'ADMIN':
+        st.markdown(f"**📄 사용량**: {user_data.get('used_pages', 0)} 장 (👑 무제한)")
     else:
-        st.markdown(f"**📄 사용량**: {st.session_state['user']['used_pages']} 장")
+        st.markdown(f"**📄 사용량**: {user_data.get('used_pages', 0)} 장")
 
     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
 
@@ -218,7 +220,7 @@ def build_prompt(text: str, mode: str) -> str:
 {text}"""
 
 # ============================================================
-# ⚙️ 7. 메인 화면: 파일 업로드 및 컨트롤러 (하단 완벽 정렬)
+# ⚙️ 7. 메인 화면: 파일 업로드 및 컨트롤러 
 # ============================================================
 top_left, top_right = st.columns(2, gap="large")
 
@@ -228,7 +230,7 @@ with top_left:
     uploaded_file = st.file_uploader("문서 파일 업로드 (PDF, TXT, DOCX)", type=["pdf", "txt", "docx"])
 
 with top_right:
-    # 💡 [핵심 보정] margin-top을 48px로 세밀 조정하여 왼쪽 업로드 박스 밑바닥과 칼같이 맞춤
+    # 💡 margin-top을 48px로 세밀 조정하여 왼쪽 업로드 박스 밑바닥과 칼같이 맞춤
     st.markdown("<div style='margin-top: 48px;'></div>", unsafe_allow_html=True) 
     with st.container(border=True):
         st.markdown("### 해석 컨트롤러")
@@ -280,9 +282,9 @@ if st.session_state.get("file_id") != file_id:
     st.session_state["page_texts"] = page_texts
     st.session_state["total_pages"] = len(page_texts)
 
-total_pages = st.session_state["total_pages"]
-page_images = st.session_state["page_images"]
-page_texts = st.session_state["page_texts"]
+total_pages = st.session_state.get("total_pages", 1)
+page_images = st.session_state.get("page_images", [])
+page_texts = st.session_state.get("page_texts", [])
 
 st.success(f"✅ 총 {total_pages} 페이지 로드 완료")
 st.divider()
@@ -294,13 +296,13 @@ with col_pdf:
     view_page = st.number_input("📄 이동할 페이지 번호 입력", min_value=1, max_value=total_pages, value=1, step=1)
     
     with st.container(height=800, border=True):
-        if page_images[view_page - 1] is not None:
+        if page_images and page_images[view_page - 1] is not None:
             st.image(page_images[view_page - 1], caption=f"━━━ 페이지 {view_page} / {total_pages} ━━━", use_container_width=True)
-        else:
+        elif page_texts:
             st.text_area("문서 내용", page_texts[view_page - 1], height=700, disabled=True, label_visibility="collapsed")
 
 cache_key = f"{file_id}_{view_page}_{selected_mode}"
-is_cached = cache_key in st.session_state["interpret_cache"]
+is_cached = cache_key in st.session_state.get("interpret_cache", {})
 
 with col_result:
     st.markdown(f"### {selected_mode.split()[1]} {selected_mode.split()[2]} 답변")
@@ -317,7 +319,7 @@ with col_result:
             if GEMINI_API_KEY == "":
                 st.error("🔑 Secrets 세팅에 GEMINI_API_KEY를 정상 등록해 주세요.")
             else:
-                text = page_texts[view_page - 1].strip()
+                text = page_texts[view_page - 1].strip() if page_texts else ""
                 if not text:
                     st.warning("⚠️ 추출 가능한 텍스트가 없습니다.")
                 else:
@@ -325,18 +327,18 @@ with col_result:
                         genai.configure(api_key=GEMINI_API_KEY)
                         model = genai.GenerativeModel(MODEL_NAME, generation_config=genai.types.GenerationConfig(max_output_tokens=8192))
                         
-                        user_info = st.session_state["user"]
-                        is_admin = (user_info['plan_type'] == 'ADMIN')
+                        current_user = st.session_state.get("user", {})
+                        is_admin = (current_user.get('plan_type') == 'ADMIN')
                         
-                        if not is_admin and user_info['plan_type'] == 'FREE' and user_info['used_pages'] >= 3:
+                        if not is_admin and current_user.get('plan_type') == 'FREE' and current_user.get('used_pages', 0) >= 3:
                             st.error("🚫 무료 제공량(3장)을 모두 소진했습니다.")
                         else:
                             with st.spinner(f"🧠 [ADMIN] 분석 중..." if is_admin else f"🧠 분석 중..."):
                                 response = model.generate_content(build_prompt(text, selected_mode))
                             
                             if not is_admin:
-                                new_used = user_info['used_pages'] + 1
-                                supabase.table("users").update({"used_pages": new_used}).eq("email", user_info['email']).execute()
+                                new_used = current_user.get('used_pages', 0) + 1
+                                supabase.table("users").update({"used_pages": new_used}).eq("email", current_user.get('email')).execute()
                                 st.session_state["user"]['used_pages'] = new_used
                             
                             st.session_state["interpret_cache"][cache_key] = response.text
