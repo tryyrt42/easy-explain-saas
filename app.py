@@ -36,33 +36,16 @@ st.markdown("""
     /* === 배경 === */
     .stApp { background-color: #0f172a; }
     
-    /* === 🔥 메인 컨텐츠 위로 끌어올리기 (기본 6rem → 1rem) === */
-    .main .block-container,
-    [data-testid="stMainBlockContainer"],
-    [data-testid="stAppViewBlockContainer"] {
-        padding-top: 1rem !important;
-    }
-    
-    /* === 상단 헤더는 투명하게만 === */
+    /* === 상단 헤더는 투명하게만 (사이드바 토글 버튼 보호) === */
     header[data-testid="stHeader"] { 
         background: transparent !important;
-        height: 0 !important;
     }
     
-    /* === 🚨 우측 상단 툴바 (Share, ⭐, GitHub) 완전 제거 === */
-    [data-testid="stToolbar"],
-    [data-testid="stToolbarActions"],
-    [data-testid="stStatusWidget"],
-    [data-testid="stMainMenu"],
-    .stDeployButton,
-    .stAppDeployButton,
-    .viewerBadge_container__r5tak,
-    .viewerBadge_link__qRIco {
-        display: none !important;
-        visibility: hidden !important;
-    }
+    /* === Deploy 버튼만 핀포인트 제거 (toolbar는 건드리지 않음!) === */
+    .stDeployButton { display: none !important; }
+    [data-testid="stMainMenu"] { display: none !important; }
     
-    /* === 🚨 사이드바 무조건 보이게 (toolbar 제거해도 사이드바는 살아있음) === */
+    /* === 🚨 사이드바 무조건 보이게 (가장 중요한 수정 지점) === */
     [data-testid="stSidebar"] {
         display: block !important;
         visibility: visible !important;
@@ -70,15 +53,13 @@ st.markdown("""
         border-right: 1px solid rgba(255,255,255,0.1) !important;
     }
     
-    /* === 사이드바 토글 버튼은 stToolbar와 별개 셀렉터라 안전 === */
+    /* === 사이드바 접기/펴기 버튼 모든 버전 대응 === */
     [data-testid="collapsedControl"],
     [data-testid="stSidebarCollapsedControl"],
-    [data-testid="stSidebarCollapseButton"],
-    [data-testid="stSidebarHeader"] button {
+    [data-testid="stSidebarCollapseButton"] {
         display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
-        z-index: 999999 !important;
     }
     
     /* === 헤드라인 그라데이션 === */
@@ -309,8 +290,7 @@ with top_left:
     )
 
 with top_right:
-    # 💡 margin-top 128px로 왼쪽 업로드 박스 밑바닥과 정확히 정렬
-    st.markdown("<div style='margin-top: 128px;'></div>", unsafe_allow_html=True) 
+    st.markdown("<div style='margin-top: 48px;'></div>", unsafe_allow_html=True) 
     with st.container(border=True):
         st.markdown("### 해석 컨트롤러")
         selected_mode = st.selectbox(
