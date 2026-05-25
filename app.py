@@ -36,7 +36,7 @@ if st.session_state.user is None:
         
         <div style='display: flex; gap: 15px; color: #e2e8f0; font-weight: 600; font-size: 1.05rem;'>
             <span>✓ 복잡한 원문 완벽 분석</span>
-            <span>✓ 1타 강사 & 동네 형 모드</span>
+            <span>✓ 비유 모드 & 동네 형 모드</span>
             <span>✓ 압도적인 해석 속도</span>
         </div>
         """, unsafe_allow_html=True)
