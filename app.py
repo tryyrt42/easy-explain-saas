@@ -1,8 +1,7 @@
 """
-쉬운 문서 해석기 — PRO 최종 통합본 (랜딩 페이지 디자인 센스 보강)
-- UI 개선 1: 랜딩 페이지 좌우 비율 1:2 (0.8 vs 1.6) 로 조정하여 우측 스샷 극대화
-- UI 개선 2: 좌측 텍스트/로그인 구역 우측에 자연스러운 수직선 추가
-- UI 개선 3: 스크린샷 자체에 은은한 둥근 테두리와 글로우(Glow) 효과 적용
+쉬운 문서 해석기 — PRO 최종 통합본 (랜딩 페이지 절대 비율 고정판)
+- UI 개선 1: 화면을 줄여도 글자가 깨지지 않도록 전체 최소 폭(min-width) 강제 고정
+- UI 개선 2: 좌측 텍스트/로그인 폼을 붉은 박스 사이즈(420px)로 정확히 고정하여 넙대대함 원천 차단
 """
 import docx  
 import io    
@@ -20,7 +19,7 @@ st.set_page_config(
     layout="wide",
 )
 
-# 세션 초기화는 무조건 최상단에서 가장 먼저 실행!
+# 세션 초기화
 if "user" not in st.session_state:
     st.session_state["user"] = None
 if "interpret_cache" not in st.session_state:
@@ -28,20 +27,12 @@ if "interpret_cache" not in st.session_state:
 
 st.markdown("""
 <style>
-    /* 전체 배경: 은은한 딥 네이비 고정 */
     .stApp { background-color: #0f172a; }
-    
-    /* 우측 상단 깃허브, 별 아이콘 등 불필요한 툴바 숨기기 */
     [data-testid="stToolbar"] { visibility: hidden !important; }
-    
-    /* 사이드바 강제 고정 */
     [data-testid="stSidebar"] { min-width: 300px !important; }
-    
     h1 { background: linear-gradient(90deg, #d8b4fe, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
-    
     button[kind="primary"] { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important; border: none !important; color: white !important; font-weight: 600 !important; border-radius: 8px !important; box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4) !important; transition: all 0.3s ease !important; }
     button[kind="primary"]:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(168, 85, 247, 0.6) !important; }
-    
     [data-testid="stVerticalBlock"] > div > div { border-radius: 12px; }
     div[data-testid="stContainer"] { border: 1px solid rgba(255, 255, 255, 0.1) !important; background-color: rgba(30, 41, 59, 0.4) !important; backdrop-filter: blur(10px); }
     [data-testid="stFileUploadDropzone"] { border: 2px dashed rgba(129, 140, 248, 0.5) !important; background-color: rgba(15, 23, 42, 0.3) !important; border-radius: 12px !important; }
@@ -97,7 +88,7 @@ def show_pricing_modal():
                 st.link_button("Pro 구독하기", final_checkout_link, type="primary", use_container_width=True)
 
 # ============================================================
-# 🔒 3. API 키 설정 및 로그인 시스템 (좌측 슬림 / 수직선 / 우측 스샷 거대화)
+# 🔒 3. API 키 설정 및 로그인 시스템 (절대 비율 고정)
 # ============================================================
 SUPABASE_URL = "https://nufvazmyuvhqkeysfwla.supabase.co"
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
@@ -107,28 +98,42 @@ GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 MODEL_NAME = "gemini-3.1-flash-lite" 
 
 if st.session_state["user"] is None:
-    # 💡 랜딩 페이지에서만 작동하는 전용 CSS 주입 (수직선 및 이미지 테두리)
+    # 💡 [핵심 보정] 반응형을 무시하고 절대 크기로 박제하는 CSS
     st.markdown("""
     <style>
-        /* 좌측 컬럼(설명+로그인) 우측에 은은한 수직선 추가 및 안쪽 여백 설정 */
-        [data-testid="stColumn"]:first-child {
-            border-right: 1px solid rgba(255, 255, 255, 0.15);
-            padding-right: 3rem !important;
+        /* 1. 전체 화면 폭 강제 고정 (브라우저 줄이면 찌그러지는 대신 가로 스크롤 생성) */
+        [data-testid="block-container"] {
+            min-width: 1400px !important;
+            padding-top: 5vh !important;
         }
-        /* 우측 스크린샷 이미지 자체에 둥근 모서리와 은은한 글로우 테두리 적용 */
+        
+        /* 2. 좌측 구역 (붉은색 박스 사이즈로 단단하게 고정) */
+        [data-testid="stColumn"]:nth-child(1) {
+            min-width: 420px !important;
+            max-width: 420px !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.15);
+            padding-right: 3.5rem !important;
+        }
+        
+        /* 3. 우측 사진 구역 (최대한 넓게 배치) */
+        [data-testid="stColumn"]:nth-child(2) {
+            min-width: 850px !important;
+            padding-left: 1rem !important;
+        }
+        
+        /* 4. 스크린샷 테두리 센스있게 마감 (희미한 글로우) */
         [data-testid="stImage"] img {
             border-radius: 12px;
             border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0px 4px 30px rgba(129, 140, 248, 0.4);
+            box-shadow: 0px 4px 40px rgba(129, 140, 248, 0.35);
         }
     </style>
     """, unsafe_allow_html=True)
 
-    # 💡 비율을 0.8 : 1.6 (1:2 비율)으로 설정하여 좌측은 조이고 우측 사진은 극대화
-    col_left, col_right = st.columns([0.8, 1.6], gap="large")
+    col_left, col_right = st.columns([1, 2.5], gap="large")
     
     with col_left:
-        st.markdown("<div style='margin-top: 5vh;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top: 2vh;'></div>", unsafe_allow_html=True)
         st.markdown("""
         <h1 style='font-size: 3rem; line-height: 1.3;'>어려운 기술 문서,<br>이제 가장 쉽게 읽으세요.</h1>
         <p style='color: #f8fafc; font-size: 1.05rem; margin-top: 1.5rem; margin-bottom: 2.5rem;'>복잡한 영문 매뉴얼, 번역기 돌리며 고생하지 마세요. AI가 핵심만 짚어 가장 이해하기 쉬운 한글로 설명해 드립니다.</p>
@@ -151,8 +156,7 @@ if st.session_state["user"] is None:
                 st.rerun()  
 
     with col_right:
-        st.markdown("<div style='margin-top: 5vh;'></div>", unsafe_allow_html=True)
-        # result_preview.png 파일을 프로젝트 폴더에 넣어주세요
+        st.markdown("<div style='margin-top: 2vh;'></div>", unsafe_allow_html=True)
         try:
             st.image("result_preview.png", use_container_width=True, output_format="PNG")
         except:
@@ -213,8 +217,7 @@ def build_prompt(text: str, mode: str) -> str:
 == 🚨 출력 필수 규칙 ==
 - 기술 용어 영문 유지(중요): 업계 표준 기술 용어, 고유 명사, 아키텍처 이름, 파라미터, 약어 등은 억지로 한글로 번역하지 말고 반드시 영문 그대로 사용하십시오. (예: '응용 프로그램 인터페이스' 대신 'API', '플로어플랜' 대신 'Floorplan' 등 원문 뉘앙스 유지)
 - 데이터 정상화: 원문에 있는 수치나 표 데이터는 절대 뭉개거나 생략하지 마십시오. 반드시 마크다운 표(|---|---|) 문법을 사용하여 깔끔한 그리드 형태로 재구성하십시오.
-- 볼드체 한국어 버그 방지(매우 중요): 마크다운 볼드체(**강조**) 뒤에 한국어 조사(입니다, 은, 는 등)가 띄어쓰기 없이 붙으면 기호가 노출되는 오류가 납니다. 반드시 `**강조 단어** 입니다` 처럼 뒤를 한 칸 띄우거나, `**강조 단어입니다**` 처럼 조사를 볼드체 안에 포함시키세요. 따옴표와 볼드체는 섞어 쓰지 마십시오.
-- 서론 금지: "설명해 드리겠습니다", "자 시작합니다" 등 요약 앞뒤에 붙는 모든 쓸데없는 인사말과 추임새를 엄격히 금지합니다.
+- 볼드체 한국어 버그 방지(매우 중요): 마크다운 볼드체(**강조**) 뒤에 한국어 조사(입니다, 은, 는 등)가 정규 표현식 오류가 나지 않도록 반드시 `**강조 단어** 입니다` 처럼 뒤를 한 칸 띄우거나, `**강조 단어입니다**` 처럼 조사를 포함하세요.
 
 == 해석할 문서 ==
 {text}
@@ -232,7 +235,6 @@ with top_left:
     uploaded_file = st.file_uploader("문서 파일 업로드 (PDF, TXT, DOCX)", type=["pdf", "txt", "docx"])
 
 with top_right:
-    # 💡 캡션 삭제 및 마진 조정으로 왼쪽 업로더와 하단 정렬 완벽 매칭
     st.markdown("<div style='margin-top: 50px;'></div>", unsafe_allow_html=True) 
     with st.container(border=True):
         st.markdown("### 해석 컨트롤러")
