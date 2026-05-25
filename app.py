@@ -1,7 +1,8 @@
 """
-쉬운 문서 해석기 — PRO 최종 통합본 (스트림릿 반응형 강제 무력화 및 수직선 적용)
-- 레이아웃 고정: flex 속성을 활용해 좌측 420px 강제 고정, 우측 최소 850px 방어
-- 디자인 엣지: 좌우를 가르는 은은한 수직선(Divider) 완벽 적용
+쉬운 문서 해석기 — PRO 최종 통합본 (UI 정밀 타격 보정)
+- UI 보정 1: 랜딩 페이지 좌측 구역 550px로 넓혀서 완벽 고정 (수직선 유지)
+- UI 보정 2: 사이드바 숨김 버그 해결 (정상적인 토글 버튼 복구)
+- UI 보정 3: 메인 화면 해석 컨트롤러 하단 라인 완벽 정렬
 """
 import docx  
 import io    
@@ -11,7 +12,7 @@ import google.generativeai as genai
 from supabase import create_client, Client
 
 # ============================================================
-# ⚙️ 1. 페이지 설정 및 전역 고급 다크 스타일 주입
+# ⚙️ 1. 페이지 설정 및 전역 스타일 주입
 # ============================================================
 st.set_page_config(
     page_title="쉬운 문서 해석기",
@@ -24,11 +25,11 @@ if "user" not in st.session_state:
 if "interpret_cache" not in st.session_state:
     st.session_state["interpret_cache"] = {}
 
+# 💡 전역 CSS (사이드바 버그를 유발하던 코드를 걷어내고 순수 스타일만 남김)
 st.markdown("""
 <style>
-    .stApp { background-color: #0f172a; overflow-x: auto !important; }
+    .stApp { background-color: #0f172a; overflow-x: hidden; }
     [data-testid="stToolbar"] { visibility: hidden !important; }
-    [data-testid="stSidebar"] { min-width: 300px !important; }
     h1 { background: linear-gradient(90deg, #d8b4fe, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
     button[kind="primary"] { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important; border: none !important; color: white !important; font-weight: 600 !important; border-radius: 8px !important; box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4) !important; transition: all 0.3s ease !important; }
     button[kind="primary"]:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(168, 85, 247, 0.6) !important; }
@@ -39,7 +40,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# 💎 2. 요금제 팝업(모달) 창 기능정의
+# 💎 2. 요금제 팝업(모달) 창
 # ============================================================
 @st.dialog("💎 플랜 업그레이드 안내")
 def show_pricing_modal():
@@ -87,7 +88,7 @@ def show_pricing_modal():
                 st.link_button("Pro 구독하기", final_checkout_link, type="primary", use_container_width=True)
 
 # ============================================================
-# 🔒 3. API 키 설정 및 로그인 시스템 (레이아웃 시멘트 고정!)
+# 🔒 3. 로그인 시스템 (비율 550px 완벽 고정)
 # ============================================================
 SUPABASE_URL = "https://nufvazmyuvhqkeysfwla.supabase.co"
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
@@ -96,36 +97,31 @@ GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 MODEL_NAME = "gemini-3.1-flash-lite" 
 
 if st.session_state["user"] is None:
-    # 💡 [핵심] 로그인 화면 전용: 스트림릿 반응형을 짓밟는 무적의 CSS
+    # 💡 로그인 화면 전용 CSS (좌측 550px 고정, 우측 스크린샷 꽉 채움)
     st.markdown("""
     <style>
-        /* 1. 컬럼들을 묶는 가로 블록이 절대 줄바꿈하지 않게, 너비 1350px 고정 */
-        div[data-testid="stHorizontalBlock"] {
+        [data-testid="block-container"] {
+            min-width: 1400px !important;
+            padding-top: 5vh !important;
+        }
+        [data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
             min-width: 1350px !important; 
-            gap: 0px !important; /* 자체 간격을 없애고 패딩으로 조절 */
         }
-        
-        /* 2. 좌측 텍스트/로그인 폼: 420px 강제 고정 및 은은한 수직선 추가 */
+        /* 좌측 구역 550px 시멘트 고정 (용규님이 그려주신 빨간 박스 사이즈) */
         div[data-testid="column"]:first-child {
-            width: 420px !important;
-            min-width: 420px !important;
-            max-width: 420px !important;
-            flex: 0 0 420px !important; 
-            
-            /* ✨ 용규님이 원하신 바로 그 은은한 수직선! */
+            width: 550px !important;
+            min-width: 550px !important;
+            max-width: 550px !important;
+            flex: 0 0 550px !important; 
             border-right: 1px solid rgba(255, 255, 255, 0.25) !important;
             padding-right: 40px !important;
-            margin-right: 40px !important; /* 선과 오른쪽 사진 사이의 간격 */
+            margin-right: 40px !important;
         }
-        
-        /* 3. 우측 스크린샷 뷰어: 850px 강제 고정 */
         div[data-testid="column"]:nth-child(2) {
-            min-width: 850px !important;
-            flex: 1 1 850px !important;
+            min-width: 800px !important;
+            flex: 1 1 800px !important;
         }
-        
-        /* 4. 스크린샷 테두리 센스있게 마감 (희미한 글로우) */
         [data-testid="stImage"] img {
             border-radius: 12px;
             border: 1px solid rgba(255, 255, 255, 0.2) !important;
@@ -139,8 +135,8 @@ if st.session_state["user"] is None:
     with col_left:
         st.markdown("<div style='margin-top: 5vh;'></div>", unsafe_allow_html=True)
         st.markdown("""
-        <h1 style='font-size: 3rem; line-height: 1.3;'>어려운 기술 문서,<br>이제 가장 쉽게 읽으세요.</h1>
-        <p style='color: #f8fafc; font-size: 1.05rem; margin-top: 1.5rem; margin-bottom: 2.5rem;'>복잡한 영문 매뉴얼, 번역기 돌리며 고생하지 마세요. AI가 핵심만 짚어 가장 이해하기 쉬운 한글로 설명해 드립니다.</p>
+        <h1 style='font-size: 3.2rem; line-height: 1.3;'>어려운 기술 문서,<br>이제 가장 쉽게 읽으세요.</h1>
+        <p style='color: #f8fafc; font-size: 1.15rem; margin-top: 1.5rem; margin-bottom: 2.5rem;'>복잡한 영문 매뉴얼, 번역기 돌리며 고생하지 마세요. AI가 핵심만 짚어 가장 이해하기 쉬운 한글로 설명해 드립니다.</p>
         """, unsafe_allow_html=True)
         
         with st.container(border=True):
@@ -164,72 +160,69 @@ if st.session_state["user"] is None:
         try:
             st.image("result_preview.png", use_container_width=True, output_format="PNG")
         except:
-            st.info("💡 여기에 결과물 스샷(result_preview.png)이 큼직하게 표시됩니다.")
+            st.info("💡 여기에 결과물 스샷(result_preview.png)이 표시됩니다.")
             
     st.stop()
 
 # ============================================================
-# 👤 4. 유저 상태창 및 워크스페이스 제어 (사이드바)
+# 👤 4. 사이드바 (사라지지 않고 항상 대기 중!)
 # ============================================================
-st.sidebar.markdown(f"**👤 계정**: {st.session_state['user']['email']}")
-st.sidebar.markdown(f"**💳 플랜**: {st.session_state['user']['plan_type']}")
+with st.sidebar:
+    st.markdown(f"**👤 계정**: {st.session_state['user']['email']}")
+    st.markdown(f"**💳 플랜**: {st.session_state['user']['plan_type']}")
 
-if st.session_state["user"]['plan_type'] == 'ADMIN':
-    st.sidebar.markdown(f"**📄 사용량**: {st.session_state['user']['used_pages']} 장 (👑 무제한)")
-else:
-    st.sidebar.markdown(f"**📄 사용량**: {st.session_state['user']['used_pages']} 장")
+    if st.session_state["user"]['plan_type'] == 'ADMIN':
+        st.markdown(f"**📄 사용량**: {st.session_state['user']['used_pages']} 장 (👑 무제한)")
+    else:
+        st.markdown(f"**📄 사용량**: {st.session_state['user']['used_pages']} 장")
 
-st.sidebar.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
 
-if st.sidebar.button("💎 플랜 업그레이드", use_container_width=True):
-    show_pricing_modal()
+    if st.button("💎 플랜 업그레이드", use_container_width=True):
+        show_pricing_modal()
 
-if st.sidebar.button("로그아웃", use_container_width=True):
-    st.session_state["user"] = None
-    st.rerun()
+    if st.button("로그아웃", use_container_width=True):
+        st.session_state["user"] = None
+        st.rerun()
 
 # ============================================================
-# 🔥 5. 3종 핵심 모드 프롬프트
+# 🔥 5. 프롬프트 세팅
 # ============================================================
 PROMPT_TEMPLATES = {
     "👨‍🏫 1타 강사 해설 모드": """너는 반도체/EDA 업계를 주름잡는 1타 강사입니다. 
 - 톤앤매너: 수강생이 절대 졸 수 없게 만드는 리듬감 있고 흡입력 있는 존댓말.
-- 제약사항: "자, 여러분", "집중하십시오", "오늘 다룰 내용은" 같은 뻔한 서론이나 인사말은 절대 금지합니다.
-- 특징: 실무 맥락을 짚어주고, 강조할 부분은 굵은 글씨로 처리하여 가독성을 높이세요.""",
+- 제약사항: "자, 여러분", "집중하십시오" 같은 뻔한 서론 절대 금지.
+- 특징: 실무 맥락을 짚어주고 강조할 부분은 굵은 글씨 처리.""",
 
     "💡 비유 모드": """너는 복잡한 기술을 일상생활에 빗대어 설명하는 천재적인 블로거입니다.
 - 톤앤매너: 정중하지만 무릎을 탁 치게 만드는 센스 있는 존댓말.
-- 제약사항: 인사말, 서론, 뻔한 추임새 절대 금지. 바로 본론의 비유로 진입하세요.
-- 특징: 아무리 어려운 개념도 일상 개념에 찰떡같이 비유해서 직관적으로 이해되게 만들어 주세요.""",
+- 제약사항: 인사말 서론 금지. 바로 비유 진입.
+- 특징: 어려운 개념을 직관적으로 이해되게 찰떡 비유.""",
 
     "😎 촌철살인 동네 형 모드": """너는 산전수전 다 겪은 실무 에이스 친한 동네 형입니다.
-- 톤앤매너: 아끼는 동생에게 알려주듯 핵심만 짚어주는 거침없고 직관적인 반말. 
-- 어투 제약사항(매우 중요): 딱딱한 명령조나 권위적인 말투(~해라, ~마라, ~한다)는 절대 금지합니다. 반드시 친근하고 자연스러운 구어체 말투(~해, ~야, ~하지 마, ~거야, ~거든)로 끝맺으세요.
-- 일반 제약사항: 억지스러운 유행어나 반복적인 추임새, 인사말은 절대 쓰지 마세요.
-- 특징: 복잡한 이론은 과감히 걷어내고, 실무에서 이 개념이 어떻게 작동하는지 뼈대만 날카롭게 팩트 폭격으로 꽂아주세요."""
+- 톤앤매너: 핵심만 짚어주는 거침없고 직관적인 반말. 
+- 어투 제약사항(매우 중요): 명령조(~해라, ~한다) 절대 금지. 친근한 구어체(~해, ~야, ~거야, ~거든) 사용.
+- 특징: 복잡한 이론 걷어내고 팩트 폭격 뼈대만 꽂아주기."""
 }
 
 def build_prompt(text: str, mode: str) -> str:
-    system_base = PROMPT_TEMPLATES[mode]
-    return f"""{system_base}
+    return f"""{PROMPT_TEMPLATES[mode]}
 
 == 구조 지침 ==
-1. 핵심 타격: "> [가장 뼈때리는 한 줄 요약]" 형태로 문서 맨 처음에 인용문으로 강렬하게 배치하세요. 서론 없이 바로 요약부터 나와야 합니다.
-2. 찰진 해설: 본문의 핵심 단락, 명령어, 파라미터를 쪼개서 선택된 모드의 컨셉에 맞게 풀어주세요.
-3. 실무 한 줄 팁: 마지막에 실무자를 위한 조언으로 마무리해 주세요.
+1. 핵심 타격: "> [가장 뼈때리는 한 줄 요약]" 
+2. 찰진 해설: 명령어, 파라미터 컨셉에 맞게.
+3. 실무 한 줄 팁: 실무자 조언으로 마무리.
 
-== 🚨 출력 필수 규칙 ==
-- 기술 용어 영문 유지(중요): 업계 표준 기술 용어, 고유 명사, 아키텍처 이름, 파라미터, 약어 등은 억지로 한글로 번역하지 말고 반드시 영문 그대로 사용하십시오. (예: '응용 프로그램 인터페이스' 대신 'API', '플로어플랜' 대신 'Floorplan' 등 원문 뉘앙스 유지)
-- 데이터 정상화: 원문에 있는 수치나 표 데이터는 절대 뭉개거나 생략하지 마십시오. 반드시 마크다운 표(|---|---|) 문법을 사용하여 깔끔한 그리드 형태로 재구성하십시오.
-- 볼드체 한국어 버그 방지(매우 중요): 마크다운 볼드체(**강조**) 뒤에 한국어 조사(입니다, 은, 는 등)가 정규 표현식 오류가 나지 않도록 반드시 `**강조 단어** 입니다` 처럼 뒤를 한 칸 띄우거나, `**강조 단어입니다**` 처럼 조사를 포함하세요.
+== 규칙 ==
+- 기술 용어 영문 유지
+- 마크다운 표 활용
+- 볼드체 뒤에 조사 띄어쓰기
 
 == 해석할 문서 ==
-{text}
-
-위 텍스트를 [{mode}] 컨셉에 맞춰 설명해 주세요."""
+{text}"""
 
 # ============================================================
-# ⚙️ 6. 상단 파일 로더 및 컨트롤러 조립 
+# ⚙️ 6. 메인 화면: 파일 업로드 및 컨트롤러 (하단 완벽 정렬)
 # ============================================================
 top_left, top_right = st.columns(2, gap="large")
 
@@ -239,7 +232,8 @@ with top_left:
     uploaded_file = st.file_uploader("문서 파일 업로드 (PDF, TXT, DOCX)", type=["pdf", "txt", "docx"])
 
 with top_right:
-    st.markdown("<div style='margin-top: 50px;'></div>", unsafe_allow_html=True) 
+    # 💡 [핵심] 제목+캡션 높이를 계산하여 정확히 바닥 라인에 안착시킴 (margin-top: 85px)
+    st.markdown("<div style='margin-top: 85px;'></div>", unsafe_allow_html=True) 
     with st.container(border=True):
         st.markdown("### 해석 컨트롤러")
         selected_mode = st.selectbox(
@@ -306,56 +300,32 @@ st.success(f"✅ 총 {total_pages} 페이지(구간) 로드 완료")
 st.divider()
 
 # ============================================================
-# 🔥 8. 하단 메인 레이아웃 (좌우 대칭 매칭)
+# 🔥 8. 하단 메인 뷰어
 # ============================================================
 col_pdf, col_result = st.columns([1, 1], gap="large")
 
 with col_pdf:
     st.markdown(f"### {file_ext.upper()} 원본")
-    
-    view_page = st.number_input(
-        "📄 이동할 페이지 번호 입력", 
-        min_value=1, 
-        max_value=total_pages, 
-        value=1, 
-        step=1
-    )
+    view_page = st.number_input("📄 이동할 페이지 번호 입력", min_value=1, max_value=total_pages, value=1, step=1)
     
     with st.container(height=800, border=True):
         if page_images[view_page - 1] is not None:
-            st.image(
-                page_images[view_page - 1],
-                caption=f"━━━ 페이지 {view_page} / {total_pages} ━━━",
-                use_container_width=True,
-            )
+            st.image(page_images[view_page - 1], caption=f"━━━ 페이지 {view_page} / {total_pages} ━━━", use_container_width=True)
         else:
-            st.markdown(f"**━━━ 가상 페이지 {view_page} / {total_pages} ━━━**")
-            st.text_area(
-                "문서 내용", 
-                page_texts[view_page - 1], 
-                height=700, 
-                disabled=True, 
-                label_visibility="collapsed"
-            )
+            st.text_area("문서 내용", page_texts[view_page - 1], height=700, disabled=True, label_visibility="collapsed")
 
 cache_key = f"{file_id}_{view_page}_{selected_mode}"
 is_cached = cache_key in st.session_state["interpret_cache"]
 
 with col_result:
-    st.markdown(f"### {selected_mode.split()[1]} {selected_mode.split()[2]}의 실시간 답변")
+    st.markdown(f"### {selected_mode.split()[1]} {selected_mode.split()[2]} 답변")
     
     status_col, btn_col = st.columns([3, 2])
     with status_col:
-        status_text = "🟢 메모리에서 불러옴" if is_cached else "⏳ 해석 대기 중"
-        st.text_input("✨ 현재 상태", value=status_text, disabled=True)
-        
+        st.text_input("✨ 현재 상태", value="🟢 메모리에서 불러옴" if is_cached else "⏳ 해석 대기 중", disabled=True)
     with btn_col:
         st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-        interpret_btn = st.button(
-            "✨ 현재 페이지 해석",
-            type="primary" if not is_cached else "secondary",
-            use_container_width=True,
-        )
+        interpret_btn = st.button("✨ 현재 페이지 해석", type="primary" if not is_cached else "secondary", use_container_width=True)
     
     with st.container(height=800, border=True):
         if interpret_btn and not is_cached:
@@ -363,39 +333,33 @@ with col_result:
                 st.error("🔑 Secrets 세팅에 GEMINI_API_KEY를 정상 등록해 주세요.")
             else:
                 text = page_texts[view_page - 1].strip()
-
                 if not text:
                     st.warning("⚠️ 해당 페이지에 추출 가능한 텍스트가 없습니다.")
                 else:
                     try:
                         genai.configure(api_key=GEMINI_API_KEY)
-                        generation_config = genai.types.GenerationConfig(max_output_tokens=8192)
-                        model = genai.GenerativeModel(MODEL_NAME, generation_config=generation_config)
-                        prompt = build_prompt(text, selected_mode)
-
+                        model = genai.GenerativeModel(MODEL_NAME, generation_config=genai.types.GenerationConfig(max_output_tokens=8192))
+                        
                         user_info = st.session_state["user"]
                         is_admin = (user_info['plan_type'] == 'ADMIN')
                         
                         if not is_admin and user_info['plan_type'] == 'FREE' and user_info['used_pages'] >= 3:
                             st.error("🚫 무료 제공량(3장)을 모두 소진했습니다.")
-                            st.info("사이드바의 [💎 플랜 업그레이드] 버튼을 눌러 결제 후 무제한으로 사용해 보세요!")
                         else:
-                            spinner_msg = f"🧠 [ADMIN] 페이지 {view_page}를 분석 중 (무제한)..." if is_admin else f"🧠 페이지 {view_page}를 분석 중입니다..."
-                            with st.spinner(spinner_msg):
-                                response = model.generate_content(prompt)
+                            with st.spinner(f"🧠 [ADMIN] 페이지 {view_page} 분석 중..." if is_admin else f"🧠 페이지 {view_page} 분석 중..."):
+                                response = model.generate_content(build_prompt(text, selected_mode))
                             
                             if not is_admin:
-                                new_used_pages = user_info['used_pages'] + 1
-                                supabase.table("users").update({"used_pages": new_used_pages}).eq("email", user_info['email']).execute()
-                                st.session_state["user"]['used_pages'] = new_used_pages
+                                new_used = user_info['used_pages'] + 1
+                                supabase.table("users").update({"used_pages": new_used}).eq("email", user_info['email']).execute()
+                                st.session_state["user"]['used_pages'] = new_used
                             
                             st.session_state["interpret_cache"][cache_key] = response.text
                             st.rerun()
-
                     except Exception as e:
-                        st.error(f"❌ 오류 발생: {e}")
+                        st.error(f"❌ 오류: {e}")
 
         if is_cached:
             st.markdown(st.session_state["interpret_cache"][cache_key])
         elif not interpret_btn:
-            st.info(f"👆 왼쪽에서 원하는 페이지로 이동한 뒤, 상단의 **[✨ 현재 페이지 해석]** 버튼을 눌러주세요.")
+            st.info("👆 상단의 **[✨ 현재 페이지 해석]** 버튼을 눌러주세요.")
