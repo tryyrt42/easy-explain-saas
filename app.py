@@ -333,7 +333,7 @@ with col_result:
                         user_info = st.session_state.user
                         
                         # 무료 유저이면서 3장 이상 썼다면 차단
-                        if user_info['plan_type'] == 'FREE' and user_info['used_pages'] >= 1000:
+                        if user_info['plan_type'] == 'FREE' and user_info['used_pages'] >= 3:
                             st.error("🚫 무료 제공량(3장)을 모두 소진했습니다.")
                             st.info("무제한 해석 기능을 이용하려면 PRO 플랜으로 업그레이드해 주세요!")
                             # 💡 여기에 결제 링크 버튼이 들어갈 예정입니다.
