@@ -1,7 +1,6 @@
 """
-쉬운 문서 해석기 — PRO 최종 통합본 (사이드바 복구 & 에러 완전 차단)
-- 버그 수정 1: 사이드바 토글 버튼 증발 현상 해결 (stHeader 복구)
-- 버그 수정 2: session_state AttributeError 방지를 위해 .get() 메서드 전면 도입
+쉬운 문서 해석기 — PRO 최종 통합본 (사이드바 문짝 완벽 복구)
+- 버그 수정: stHeader 전체 숨김 코드를 삭제하고, 우측 툴바만 핀포인트 삭제
 - 유지 사항: F5 새로고침 방어, 로그인 창 550px 고정, 컨트롤러 하단 정렬 유지
 """
 import docx  
@@ -21,18 +20,18 @@ st.set_page_config(
     initial_sidebar_state="expanded" 
 )
 
-# 💡 안전한 세션 초기화
+# 안전한 세션 초기화
 if "user" not in st.session_state:
     st.session_state["user"] = None
 if "interpret_cache" not in st.session_state:
     st.session_state["interpret_cache"] = {}
 
-# 💡 전역 CSS (사이드바 버튼을 날려버리던 악성 헤더 숨김 코드 제거!)
+# 💡 전역 CSS (사이드바 버튼을 날려버리던 악성 코드를 완전히 제거했습니다!)
 st.markdown("""
 <style>
     .stApp { background-color: #0f172a; overflow-x: hidden; }
-    /* 우측 상단 툴바(별모양, 깃허브)만 정확히 숨김 */
-    [data-testid="stToolbar"] { visibility: hidden !important; }
+    /* 🚨 우측 상단 툴바(별모양, 깃허브 등)만 정확하게 숨김! 사이드바 토글 버튼은 건드리지 않음! */
+    [data-testid="stToolbar"], [data-testid="stActionElements"] { display: none !important; }
     
     h1 { background: linear-gradient(90deg, #d8b4fe, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
     button[kind="primary"] { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important; border: none !important; color: white !important; font-weight: 600 !important; border-radius: 8px !important; box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4) !important; transition: all 0.3s ease !important; }
@@ -52,7 +51,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 MODEL_NAME = "gemini-3.1-flash-lite" 
 
-# 💡 F5를 눌러도 st.query_params에 이메일이 남아있으면 자동 로그인 처리
+# F5를 눌러도 st.query_params에 이메일이 남아있으면 자동 로그인 처리
 if st.session_state.get("user") is None and "logged_in_email" in st.query_params:
     saved_email = st.query_params["logged_in_email"]
     response = supabase.table("users").select("*").eq("email", saved_email).execute()
@@ -147,7 +146,7 @@ if st.session_state.get("user") is None:
                     insert_res = supabase.table("users").insert(new_user).execute()
                     st.session_state["user"] = insert_res.data[0]
                 
-                # 💡 핵심: 로그인 성공 시 브라우저 주소창에 이메일 기록 (F5 방어)
+                # 핵심: 로그인 성공 시 브라우저 주소창에 이메일 기록 (F5 방어)
                 st.query_params["logged_in_email"] = email_input
                 st.rerun()  
 
@@ -160,7 +159,7 @@ if st.session_state.get("user") is None:
     st.stop() 
 
 # ============================================================
-# 👤 5. 유저 사이드바 (사라지지 않고 항상 대기 중!)
+# 👤 5. 유저 사이드바 (정상 작동 보장!)
 # ============================================================
 user_data = st.session_state.get("user", {})
 
@@ -180,7 +179,7 @@ with st.sidebar:
 
     if st.button("로그아웃", use_container_width=True):
         st.session_state["user"] = None
-        st.query_params.clear() # 💡 로그아웃 시 주소창 기록도 삭제
+        st.query_params.clear() 
         st.rerun()
 
 # ============================================================
