@@ -1,13 +1,13 @@
 """
-쉬운 문서 해석기 — MVP v2.3 (완벽 대칭 레이아웃 및 요금제 팝업화)
-- UI 업데이트: 좌우 칸 높낮이 완벽 대칭 매칭 (height=800 고정)
-- 요금제 개편: 메인 화면에서 제거하고 사이드바 버튼 클릭 시 팝업(모달)으로 구동
-- 말투 교정: 동네 형 모드의 어미를 친근한 구어체(~해, ~야, ~하지 마)로 다듬음
+쉬운 문서 해석기 — MVP v2.4 (UI/UX 밸런스 완벽 교정판)
+- UI 1차 수정: 로그인 첫 화면 좌우 비율 조정 (1.8 : 1)으로 넙대대함 해결
+- UI 2차 수정: 메인 컨트롤러 박스와 캡션 하단 라인 완벽 정렬
+- 기능 유지: 요금제 팝업(모달) 유지 및 대칭 레이아웃(height=800) 적용
 """
-import docx  # 최상단에 추가 (pip install python-docx)
-import io    # 최상단에 추가
+import docx  
+import io    
 import streamlit as st
-import fitz  # PyMuPDF
+import fitz  
 import google.generativeai as genai
 from supabase import create_client, Client
 
@@ -71,7 +71,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# 💎 2. 요금제 팝업(모달) 창 기능정의 (높이 대칭 수정 완료)
+# 💎 2. 요금제 팝업(모달) 창 기능정의
 # ============================================================
 @st.dialog("💎 플랜 업그레이드 안내")
 def show_pricing_modal():
@@ -79,11 +79,9 @@ def show_pricing_modal():
     col_free, col_pro = st.columns(2)
 
     with col_free:
-        # 👇 여기에 고정 높이(height=420)를 줘서 PRO 칸과 대칭을 맞춥니다.
         with st.container(height=420, border=True):
             st.subheader("FREE")
             st.markdown("## ₩ 0 / 월")
-            # 텍스트 높이도 통일감을 위해 약간 늘렸습니다.
             st.markdown(
                 """<div style='min-height: 180px; color: #94a3b8;'>
                 ✔️ <b>매월 3장</b> 해석 제공<br>
@@ -98,11 +96,9 @@ def show_pricing_modal():
                 st.button("FREE 플랜", disabled=True, key="modal_free_btn_dis", use_container_width=True)
 
     with col_pro:
-        # 👇 마찬가지로 고정 높이(height=420)를 줘서 완벽한 대칭을 맞춥니다.
         with st.container(height=420, border=True):
             st.subheader("PRO (인기)")
             st.markdown("## ₩ 9,900 / 월")
-            # 텍스트 높이 통일
             st.markdown(
                 """<div style='min-height: 180px; color: #94a3b8;'>
                 ✔️ <b>월 1,000장 해석 제공</b><br>
@@ -135,9 +131,9 @@ MODEL_NAME = "gemini-3.1-flash-lite"
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# 로그인되어 있지 않다면 직관적인 랜딩 페이지 보여주고 멈춤
 if st.session_state.user is None:
-    col_marketing, col_login = st.columns([1.2, 1], gap="large")
+    # 💡 첫 화면 슬림화 (1.8 : 1 비율 적용)
+    col_marketing, col_login = st.columns([1.8, 1], gap="large")
     
     with col_marketing:
         st.markdown("<div style='margin-top: 15vh;'></div>", unsafe_allow_html=True) 
@@ -189,7 +185,6 @@ else:
 
 st.sidebar.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
 
-# 메인 화면에서 쫓겨난 요금제를 사이드바 버튼으로 연동!
 if st.sidebar.button("💎 플랜 업그레이드", use_container_width=True):
     show_pricing_modal()
 
@@ -201,7 +196,7 @@ if "interpret_cache" not in st.session_state:
     st.session_state.interpret_cache = {}
 
 # ============================================================
-# 🔥 5. 3종 핵심 모드 프롬프트 (동네 형 말투 친근하게 교정 완료)
+# 🔥 5. 3종 핵심 모드 프롬프트
 # ============================================================
 PROMPT_TEMPLATES = {
     "👨‍🏫 1타 강사 해설 모드": """너는 반도체/EDA 업계를 주름잡는 1타 강사입니다. 
@@ -242,23 +237,24 @@ def build_prompt(text: str, mode: str) -> str:
 위 텍스트를 [{mode}] 컨셉에 맞춰 설명해 주세요."""
 
 # ============================================================
-# ⚙️ 6. 상단 파일 로더 및 컨트롤러 조립 (박스 디자인 적용 완료)
+# ⚙️ 6. 상단 파일 로더 및 컨트롤러 조립 
 # ============================================================
 top_left, top_right = st.columns(2, gap="large")
 
 with top_right:
-    # 👇 우측 구역 전체를 은은한 곡선 박스로 감쌉니다.
+    # 💡 캡션을 박스 밖으로 빼서 파일 업로더와 하단 라인 완벽 정렬
     with st.container(border=True):
-        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True) # 위쪽 여백 살짝
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True) 
         st.markdown("### 해석 컨트롤러")
         selected_mode = st.selectbox(
             "해석 스타일 선택",
             list(PROMPT_TEMPLATES.keys()),
-            index=2, # 기본값을 동네 형 모드로 세팅
-            label_visibility="collapsed" # selectbox 자체 라벨은 숨겨서 깔끔하게
+            index=2, 
+            label_visibility="collapsed" 
         )
-        st.caption("☝️ 원하는 해석 스타일을 선택해 주세요.")
-        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True) # 아래쪽 여백 살짝
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True) 
+    
+    st.caption("☝️ 원하는 해석 스타일을 선택해 주세요.")
 
 with top_left:
     st.title("📄 쉬운 문서 해석기")
@@ -269,7 +265,9 @@ if uploaded_file is None:
     st.info("👆 좌측에 문서를 업로드하면 툴이 시작됩니다.")
     st.stop()
 
-# 용규님의 원래 [문서 파싱 및 텍스트 추출 로직] 100% 안전하게 보호구동
+# ============================================================
+# ⚙️ 7. 파일 파싱 및 텍스트 추출 로직 
+# ============================================================
 file_id = f"{uploaded_file.name}_{uploaded_file.size}"
 file_ext = uploaded_file.name.split('.')[-1].lower()
 
@@ -320,11 +318,10 @@ st.success(f"✅ 총 {total_pages} 페이지(구간) 로드 완료")
 st.divider()
 
 # ============================================================
-# 7. 🔥 하단 메인 레이아웃 (좌우 자로 잰 듯 완벽 대칭 구조 매칭)
+# 🔥 8. 하단 메인 레이아웃 (좌우 대칭 매칭)
 # ============================================================
 col_pdf, col_result = st.columns([1, 1], gap="large")
 
-# 🔍 [왼쪽 칸] 원본 문서 뷰어 - height 800 고정
 with col_pdf:
     st.markdown(f"### {file_ext.upper()} 원본")
     
@@ -353,11 +350,9 @@ with col_pdf:
                 label_visibility="collapsed"
             )
 
-# 캐시 확인
 cache_key = f"{file_id}_{view_page}_{selected_mode}"
 is_cached = cache_key in st.session_state.interpret_cache
 
-# ✨ [오른쪽 칸] AI 해석 답변창 - height 800 고정
 with col_result:
     st.markdown(f"### {selected_mode.split()[1]} {selected_mode.split()[2]}의 실시간 답변")
     
@@ -390,7 +385,6 @@ with col_result:
                         model = genai.GenerativeModel(MODEL_NAME, generation_config=generation_config)
                         prompt = build_prompt(text, selected_mode)
 
-                        # === [요금제 문지기 및 ADMIN 프리패스 로직 완벽 연동] ===
                         user_info = st.session_state.user
                         is_admin = (user_info['plan_type'] == 'ADMIN')
                         
@@ -409,7 +403,6 @@ with col_result:
                             
                             st.session_state.interpret_cache[cache_key] = response.text
                             st.rerun()
-                        # === [요금제 문지기 로직 끝] ===
 
                     except Exception as e:
                         st.error(f"❌ 오류 발생: {e}")
