@@ -16,50 +16,45 @@ SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 # 클라이언트 생성
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+
 # ============================================================
-# 🔒 [5단계] 로그인 시스템 - CSS 애니메이션 배경 버전
+# 🔒 [5단계] 로그인 시스템 - 직관적이고 친근한 랜딩 페이지
 # ============================================================
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# 로그인되어 있지 않다면 고급 랜딩 페이지+로그인 화면을 보여주고 멈춤
 if st.session_state.user is None:
-    # 1. 화면 전체를 좌/우 2칸으로 꽉 차게 나눕니다.
     col_marketing, col_login = st.columns([1.2, 1], gap="large")
     
     with col_marketing:
-        # 좌측: 꿀렁이는 CSS 배경 위에 텍스트만 깔끔하게 올립니다.
         st.markdown("<div style='margin-top: 15vh;'></div>", unsafe_allow_html=True) 
         
-        # 💡 (사진 넣는 st.image 부분 완벽하게 삭제!)
-        
-        # 배경색이 어두워졌으니 글자색을 약간 더 밝게(흰색 톤) 조정했습니다.
+        # 💡 직관적이고 혜택 중심적인 카피라이팅으로 변경
         st.markdown("""
-        <h1 style='background: linear-gradient(90deg, #d8b4fe, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800; font-size: 3.5rem; line-height: 1.2;'>나노 단위의 정밀함.<br>바나나처럼 쉬운 명쾌함.</h1>
-        <p style='color: #f8fafc; font-size: 1.25rem; margin-top: 1.5rem; margin-bottom: 2rem; max-width: 500px;'>복잡한 기술 문서, 더 이상 시간 낭비하지 마십시오. 나노 바나나 AI가 수천 페이지의 PDF, DOCX, TXT 문서를 단 몇 초 만에 나노 단위로 분석하여 핵심만 명쾌하게 해석해 드립니다.</p>
+        <h1 style='background: linear-gradient(90deg, #d8b4fe, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800; font-size: 3.2rem; line-height: 1.3;'>어려운 기술 문서,<br>이제 가장 쉽게 읽으세요.</h1>
+        <p style='color: #f8fafc; font-size: 1.15rem; margin-top: 1.5rem; margin-bottom: 2rem; max-width: 500px; line-height: 1.6;'>수백 페이지의 복잡한 영문 매뉴얼과 기술 문서, 더 이상 번역기 돌리며 고통받지 마세요. 문서를 업로드만 하면 AI가 핵심만 짚어 가장 이해하기 쉬운 한글로 설명해 드립니다.</p>
         
         <div style='display: flex; gap: 15px; color: #e2e8f0; font-weight: 600; font-size: 1.05rem;'>
-            <span>✓ PDF 원문 렌더링</span>
-            <span>✓ DOCX/TXT 완벽 지원</span>
-            <span>✓ Gemini Flash 엔진</span>
+            <span>✓ 복잡한 원문 완벽 분석</span>
+            <span>✓ 1타 강사 & 동네 형 모드</span>
+            <span>✓ 압도적인 해석 속도</span>
         </div>
         """, unsafe_allow_html=True)
 
     with col_login:
-        # 우측: 세련된 로그인 폼 (유리 상자 적용)
         st.markdown("<div style='margin-top: 15vh;'></div>", unsafe_allow_html=True)
         
         with st.container(border=True):
-            st.markdown("<h2 style='text-align: center; font-weight: 700; margin-bottom: 0.5rem;'>계정 인증 및 시작</h2>", unsafe_allow_html=True)
-            st.markdown("<p style='text-align: center; color: #94a3b8; font-size: 1rem; margin-bottom: 2.5rem;'>인증된 이메일을 입력하여 강력한 기능을 즉시 이용해 보세요.</p>", unsafe_allow_html=True)
+            # 💡 글자 크기를 줄이고(h2->h3) 텍스트를 짧게 다듬어서 줄바꿈(글자 떨어짐) 방지
+            st.markdown("<h3 style='text-align: center; font-weight: 700; margin-bottom: 0.5rem;'>문서 해석 시작하기</h3>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align: center; color: #94a3b8; font-size: 0.95rem; margin-bottom: 2.5rem;'>이메일만 입력하면 지금 바로 무료로 체험해 볼 수 있습니다.</p>", unsafe_allow_html=True)
             
-            st.markdown("### 이메일 입력")
-            
-            email_input = st.text_input("이메일 주소", placeholder="user@company.com", label_visibility="collapsed")
+            email_input = st.text_input("이메일 주소", placeholder="example@email.com", label_visibility="collapsed")
             
             st.markdown("<div style='margin-top: 20px;'></div>", unsafe_allow_html=True)
             
-            login_btn = st.button("인증 및 워크플로우 시작", type="primary", use_container_width=True)
+            # 💡 무서운 단어를 빼고 클릭하고 싶게 만드는 부드러운 버튼 텍스트로 변경
+            login_btn = st.button("✨ 이메일로 간편하게 시작하기", type="primary", use_container_width=True)
             
             if login_btn and email_input:
                 response = supabase.table("users").select("*").eq("email", email_input).execute()
@@ -75,7 +70,6 @@ if st.session_state.user is None:
                 st.rerun()  
                 
     st.stop()
-
 # ============================================================
 # 👤 유저 상태창 (사이드바)
 # ============================================================
