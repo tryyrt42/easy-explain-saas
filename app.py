@@ -9,7 +9,6 @@ import io
 import streamlit as st
 import fitz  
 import google.generativeai as genai
-from pptx import Presentation  # 🆕 PPTX 지원
 from supabase import create_client, Client
 
 # ============================================================
@@ -363,42 +362,58 @@ if st.session_state.get("file_id") != file_id:
                 page_texts.append(page.get_text())
             doc.close()
         
-        # 🆕 PPTX 처리 — 슬라이드 = 페이지
+        # 🆕 PPTX 처리 — LibreOffice로 PDF 변환 후 기존 PDF 로직 재사용
         elif file_ext == "pptx":
-            prs = Presentation(io.BytesIO(uploaded_file.read()))
-            for slide_idx, slide in enumerate(prs.slides, start=1):
-                slide_parts = []
-                
-                # 1) 일반 텍스트 박스에서 텍스트 추출
-                for shape in slide.shapes:
-                    if shape.has_text_frame:
-                        for para in shape.text_frame.paragraphs:
-                            para_text = "".join(run.text for run in para.runs)
-                            if para_text.strip():
-                                slide_parts.append(para_text)
-                
-                # 2) 표 안에 있는 텍스트도 추출
-                for shape in slide.shapes:
-                    if shape.has_table:
-                        for row in shape.table.rows:
-                            row_text = " | ".join(
-                                cell.text.strip() 
-                                for cell in row.cells 
-                                if cell.text.strip()
-                            )
-                            if row_text:
-                                slide_parts.append(row_text)
-                
-                # 3) 슬라이드 노트(발표자 메모)도 함께 해석에 활용
-                if slide.has_notes_slide:
-                    notes = slide.notes_slide.notes_text_frame.text.strip()
-                    if notes:
-                        slide_parts.append(f"\n[발표자 노트]\n{notes}")
-                
-                slide_full = "\n".join(slide_parts) if slide_parts else "(빈 슬라이드)"
-                page_texts.append(f"[슬라이드 {slide_idx} / {len(prs.slides)}]\n\n{slide_full}")
+            import subprocess
+            import tempfile
+            import os
             
-            page_images = [None] * len(page_texts)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                # 1) 업로드된 PPTX를 임시 폴더에 저장
+                pptx_path = os.path.join(tmpdir, "input.pptx")
+                with open(pptx_path, "wb") as f:
+                    f.write(uploaded_file.read())
+                
+                # 2) LibreOffice headless로 PDF 변환 (서버에서 실행)
+                try:
+                    subprocess.run(
+                        [
+                            "libreoffice", "--headless",
+                            "--convert-to", "pdf",
+                            "--outdir", tmpdir,
+                            pptx_path
+                        ],
+                        check=True,
+                        capture_output=True,
+                        timeout=180  # 3분 타임아웃
+                    )
+                except FileNotFoundError:
+                    st.error("⚠️ LibreOffice 미설치. `packages.txt`에 `libreoffice` 한 줄 추가하고 재배포하세요.")
+                    st.stop()
+                except subprocess.TimeoutExpired:
+                    st.error("⚠️ 변환 시간 초과 (3분). 슬라이드가 너무 많거나 무거울 수 있어요.")
+                    st.stop()
+                except subprocess.CalledProcessError as e:
+                    st.error(f"⚠️ PPTX 변환 실패: {e.stderr.decode()[:200] if e.stderr else 'unknown error'}")
+                    st.stop()
+                
+                # 3) 변환된 PDF 읽기
+                pdf_path = os.path.join(tmpdir, "input.pdf")
+                if not os.path.exists(pdf_path):
+                    st.error("⚠️ 변환된 PDF 파일을 찾을 수 없습니다.")
+                    st.stop()
+                
+                with open(pdf_path, "rb") as f:
+                    pdf_bytes = f.read()
+                
+                # 4) PDF처럼 처리 — 이미지 + 텍스트 동시에 추출
+                doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+                for i in range(len(doc)):
+                    page = doc[i]
+                    pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
+                    page_images.append(pix.tobytes("png"))
+                    page_texts.append(page.get_text())
+                doc.close()
         
         else:
             # TXT / DOCX 처리
