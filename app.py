@@ -1,8 +1,7 @@
 """
-쉬운 문서 해석기 — MVP v2.4 (UI/UX 밸런스 완벽 교정판)
-- UI 1차 수정: 로그인 첫 화면 좌우 비율 조정 (1.8 : 1)으로 넙대대함 해결
-- UI 2차 수정: 메인 컨트롤러 박스와 캡션 하단 라인 완벽 정렬
-- 기능 유지: 요금제 팝업(모달) 유지 및 대칭 레이아웃(height=800) 적용
+쉬운 문서 해석기 — MVP v2.5 (초광각 해상도 레이아웃 방어 및 툴바 제거)
+- UI 업데이트: 우측 상단 지저분한 Streamlit 기본 툴바 아이콘 강제 숨김
+- 레이아웃 수정: 로그인 폼 우측에 빈 여백(Spacer) 컬럼을 추가하여 박스가 왼쪽 텍스트로 밀착되도록 교정
 """
 import docx  
 import io    
@@ -25,6 +24,11 @@ st.markdown("""
     /* 전체 배경: 은은한 딥 네이비 고정 */
     .stApp {
         background-color: #0f172a;
+    }
+    
+    /* 💡 [추가됨] 우측 상단 깃허브, 별 아이콘 등 불필요한 툴바 숨기기 */
+    [data-testid="stToolbar"] {
+        visibility: hidden !important;
     }
     
     /* 메인 타이틀 그라데이션 텍스트 효과 */
@@ -132,8 +136,9 @@ if "user" not in st.session_state:
     st.session_state.user = None
 
 if st.session_state.user is None:
-    # 💡 첫 화면 슬림화 (1.8 : 1 비율 적용)
-    col_marketing, col_login = st.columns([1.8, 1], gap="large")
+    # 💡 [추가됨] 3칸으로 나누어 맨 우측에 빈 공간(col_spacer)을 할당합니다. 
+    # 이렇게 하면 화면이 아무리 커져도 로그인 박스가 왼쪽 텍스트 구역으로 밀착됩니다.
+    col_marketing, col_login, col_spacer = st.columns([1.3, 1, 1.2], gap="large")
     
     with col_marketing:
         st.markdown("<div style='margin-top: 15vh;'></div>", unsafe_allow_html=True) 
@@ -170,6 +175,10 @@ if st.session_state.user is None:
                 st.success("✅ 로그인 성공!")
                 st.rerun()  
                 
+    # col_spacer는 화면 레이아웃을 밀어주는 역할만 하므로 내용은 비워둡니다.
+    with col_spacer:
+        pass
+        
     st.stop()
 
 # ============================================================
@@ -242,7 +251,6 @@ def build_prompt(text: str, mode: str) -> str:
 top_left, top_right = st.columns(2, gap="large")
 
 with top_right:
-    # 💡 캡션을 박스 밖으로 빼서 파일 업로더와 하단 라인 완벽 정렬
     with st.container(border=True):
         st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True) 
         st.markdown("### 해석 컨트롤러")
