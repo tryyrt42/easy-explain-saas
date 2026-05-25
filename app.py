@@ -12,8 +12,7 @@ from supabase import create_client, Client
 
 # Supabase DB 연결 세팅
 SUPABASE_URL = "https://nufvazmyuvhqkeysfwla.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51ZnZhem15dXZocWtleXNmd2xhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDIxODcsImV4cCI6MjA5NTIxODE4N30.6MNFMzQjEkeItf7OTMr82gg5pn66s3ksxwnrIff14po"
-
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 # 클라이언트 생성
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -178,7 +177,7 @@ with col_pro:
 # ============================================================
 # ⚙️ 환경 설정
 # ============================================================
-GEMINI_API_KEY = ""
+GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 MODEL_NAME = "gemini-3.1-flash-lite" 
 
 if "interpret_cache" not in st.session_state:
