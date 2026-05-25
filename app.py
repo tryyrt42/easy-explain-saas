@@ -54,7 +54,13 @@ if st.session_state.user is None:
 # ============================================================
 st.sidebar.markdown(f"**👤 계정**: {st.session_state.user['email']}")
 st.sidebar.markdown(f"**💳 플랜**: {st.session_state.user['plan_type']}")
-st.sidebar.markdown(f"**📄 사용량**: {st.session_state.user['used_pages']} 장")
+
+# 💡 ADMIN 계정일 경우 사용량 표시에 (무제한) 안내 추가
+if st.session_state.user['plan_type'] == 'ADMIN':
+    st.sidebar.markdown(f"**📄 사용량**: {st.session_state.user['used_pages']} 장 (👑 무제한)")
+else:
+    st.sidebar.markdown(f"**📄 사용량**: {st.session_state.user['used_pages']} 장")
+
 if st.sidebar.button("로그아웃"):
     st.session_state.user = None
     st.rerun()
@@ -91,7 +97,10 @@ with col_free:
             unsafe_allow_html=True
         )
         
-        st.button("현재 이용 중", disabled=True, use_container_width=True)
+        if st.session_state.user['plan_type'] == 'FREE':
+            st.button("현재 이용 중", disabled=True, use_container_width=True)
+        else:
+            st.button("FREE 플랜", disabled=True, use_container_width=True)
 
 with col_pro:
     with st.container(border=True):
@@ -112,7 +121,12 @@ with col_pro:
         current_user_email = st.session_state.user['email']
         final_checkout_link = f"{BASE_CHECKOUT_LINK}?checkout[email]={current_user_email}"
         
-        st.link_button("Pro 구독하기", final_checkout_link, type="primary", use_container_width=True)
+        if st.session_state.user['plan_type'] == 'PRO':
+            st.button("현재 이용 중 (PRO)", disabled=True, use_container_width=True)
+        elif st.session_state.user['plan_type'] == 'ADMIN':
+            st.button("👑 마스터 계정 사용 중", disabled=True, use_container_width=True)
+        else:
+            st.link_button("Pro 구독하기", final_checkout_link, type="primary", use_container_width=True)
 # ============================================================
 # ⚙️ 환경 설정
 # ============================================================
@@ -169,7 +183,7 @@ def build_prompt(text: str, mode: str) -> str:
 # ============================================================
 # 상단 레이아웃 (좌: 파일 업로드 / 우: 컨트롤러)
 # ============================================================
-top_left, top_right = st.columns(2, gap="large") # 👈 [2, 1]을 지우고 깔끔하게 2로 바꿨습니다.
+top_left, top_right = st.columns(2, gap="large") 
 with top_right:
     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
     st.markdown("### 해석 컨트롤러")
@@ -251,7 +265,7 @@ st.markdown("### 해석 컨트롤러")
 selected_mode = st.selectbox(
     "해석 스타일 선택",
     list(PROMPT_TEMPLATES.keys()),
-    index=1,  # 👈 1로 변경합니다.
+    index=1,  
 )
 st.caption("☝️ 원하는 스타일을 선택하고, 아래 원본 뷰어에서 이동한 페이지의 해석 버튼을 눌러주세요.")
 
@@ -331,23 +345,24 @@ with col_result:
 
                         # === [요금제 문지기 로직 시작] ===
                         user_info = st.session_state.user
+                        is_admin = (user_info['plan_type'] == 'ADMIN')  # 💡 ADMIN 여부 확인 변수 생성
                         
-                        # 무료 유저이면서 3장 이상 썼다면 차단
-                        if user_info['plan_type'] == 'FREE' and user_info['used_pages'] >= 3:
+                        # 무료 유저이면서 3장 이상 썼다면 차단 (단, ADMIN 계정은 이 조건문을 무조건 통과)
+                        if not is_admin and user_info['plan_type'] == 'FREE' and user_info['used_pages'] >= 3:
                             st.error("🚫 무료 제공량(3장)을 모두 소진했습니다.")
                             st.info("무제한 해석 기능을 이용하려면 PRO 플랜으로 업그레이드해 주세요!")
-                            # 💡 여기에 결제 링크 버튼이 들어갈 예정입니다.
                         else:
-                            # 번역 실행
-                            with st.spinner(f"🧠 페이지 {view_page}를 분석 중입니다..."):
+                            # 번역 실행 (FREE 한도 내, PRO, 그리고 ADMIN 계정 모두 정상 작동)
+                            spinner_msg = f"🧠 [ADMIN] 페이지 {view_page}를 분석 중입니다 (무제한 패스)..." if is_admin else f"🧠 페이지 {view_page}를 분석 중입니다..."
+                            with st.spinner(spinner_msg):
                                 response = model.generate_content(prompt)
-                                
-                            # DB에 사용량 +1 장부 업데이트
-                            new_used_pages = user_info['used_pages'] + 1
-                            supabase.table("users").update({"used_pages": new_used_pages}).eq("email", user_info['email']).execute()
                             
-                            # 화면(사이드바)에도 즉시 반영
-                            st.session_state.user['used_pages'] = new_used_pages
+                            # 💡 ADMIN 계정이 아닐 때만 DB 및 세션에 실질적인 사용량을 누적시킵니다.
+                            if not is_admin:
+                                new_used_pages = user_info['used_pages'] + 1
+                                supabase.table("users").update({"used_pages": new_used_pages}).eq("email", user_info['email']).execute()
+                                st.session_state.user['used_pages'] = new_used_pages
+                            
                             st.session_state.interpret_cache[cache_key] = response.text
                             st.rerun()
                         # === [요금제 문지기 로직 끝] ===
@@ -358,4 +373,4 @@ with col_result:
         if is_cached:
             st.markdown(st.session_state.interpret_cache[cache_key])
         elif not interpret_btn:
-            st.info(f"👆 왼쪽에서 원하는 페이지로 이동한 뒤, 상단의 **[✨ 현재 페이지 해석]** 버튼을 눌러주세요.")
+            st.info(f"👆 ¼쪽에서 원하는 페이지로 이동한 뒤, 상단의 **[✨ 현재 페이지 해석]** 버튼을 눌러주세요.")
