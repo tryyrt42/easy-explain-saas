@@ -1,17 +1,19 @@
 """
-쉬운 문서 해석기 — PRO 최종 안정화 버전 (사이드바 증발 버그 영구 해결)
-- 치명적 버그 수정: 시스템 UI를 가리던 독성 CSS 제거 및 사이드바 버튼 명시적 복구
-- 유지 사항: F5 새로고침 세션 유지, 랜딩 페이지 550px 고정, 컨트롤러 정렬
+쉬운 문서 해석기 — 사이드바 복구 + PPTX 지원 추가 버전
+- 🔧 수정 1: 랜딩 페이지의 min-width 1200px 누수로 사이드바가 화면 밖으로 밀려나던 버그 제거
+- 🔧 수정 2: 사이드바 강제 노출 CSS 추가 (구버전/신버전 Streamlit 모두 대응)
+- 🆕 추가: PPTX 파일 지원 (슬라이드 단위로 해석)
 """
 import docx  
 import io    
 import streamlit as st
 import fitz  
 import google.generativeai as genai
+from pptx import Presentation  # 🆕 PPTX 지원
 from supabase import create_client, Client
 
 # ============================================================
-# ⚙️ 1. 페이지 설정 (사이드바 무조건 확장 상태로 시작)
+# ⚙️ 1. 페이지 설정
 # ============================================================
 st.set_page_config(
     page_title="쉬운 문서 해석기",
@@ -26,29 +28,75 @@ if "user" not in st.session_state:
 if "interpret_cache" not in st.session_state:
     st.session_state["interpret_cache"] = {}
 
-# 💡 전역 CSS (사이드바를 날려버리던 코드를 싹 지우고, 안전한 스타일만 남겼습니다)
+# ============================================================
+# 💡 전역 CSS — 사이드바를 명시적으로 강제 노출
+# ============================================================
 st.markdown("""
 <style>
-    /* 배경 및 기본 스타일 */
+    /* === 배경 === */
     .stApp { background-color: #0f172a; }
     
-    /* 🚨 스트림릿 상단 시스템 헤더는 투명하게만 만들고 절대 지우지 않음 (사이드바 버튼 보호) */
-    header[data-testid="stHeader"] { background: transparent !important; }
+    /* === 상단 헤더는 투명하게만 (사이드바 토글 버튼 보호) === */
+    header[data-testid="stHeader"] { 
+        background: transparent !important;
+    }
     
-    /* 거슬리는 Deploy 버튼 등만 핀포인트로 안전하게 제거 */
+    /* === Deploy 버튼만 핀포인트 제거 (toolbar는 건드리지 않음!) === */
     .stDeployButton { display: none !important; }
-    [data-testid="stToolbar"] { display: none !important; }
+    [data-testid="stMainMenu"] { display: none !important; }
     
-    /* 🚨 사이드바 열기/닫기 버튼 무조건 강제 노출 */
-    [data-testid="collapsedControl"] { display: flex !important; visibility: visible !important; }
+    /* === 🚨 사이드바 무조건 보이게 (가장 중요한 수정 지점) === */
+    [data-testid="stSidebar"] {
+        display: block !important;
+        visibility: visible !important;
+        background-color: #1e293b !important;
+        border-right: 1px solid rgba(255,255,255,0.1) !important;
+    }
     
-    /* 컴포넌트 디자인 */
-    h1 { background: linear-gradient(90deg, #d8b4fe, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
-    button[kind="primary"] { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important; border: none !important; color: white !important; font-weight: 600 !important; border-radius: 8px !important; box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4) !important; transition: all 0.3s ease !important; }
-    button[kind="primary"]:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(168, 85, 247, 0.6) !important; }
+    /* === 사이드바 접기/펴기 버튼 모든 버전 대응 === */
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="stSidebarCollapseButton"] {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+    
+    /* === 헤드라인 그라데이션 === */
+    h1 { 
+        background: linear-gradient(90deg, #d8b4fe, #818cf8); 
+        -webkit-background-clip: text; 
+        -webkit-text-fill-color: transparent; 
+        font-weight: 800 !important; 
+    }
+    
+    /* === Primary 버튼 === */
+    button[kind="primary"] { 
+        background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important; 
+        border: none !important; 
+        color: white !important; 
+        font-weight: 600 !important; 
+        border-radius: 8px !important; 
+        box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4) !important; 
+        transition: all 0.3s ease !important; 
+    }
+    button[kind="primary"]:hover { 
+        transform: translateY(-2px); 
+        box-shadow: 0 6px 20px rgba(168, 85, 247, 0.6) !important; 
+    }
+    
+    /* === 컨테이너 === */
     [data-testid="stVerticalBlock"] > div > div { border-radius: 12px; }
-    div[data-testid="stContainer"] { border: 1px solid rgba(255, 255, 255, 0.1) !important; background-color: rgba(30, 41, 59, 0.4) !important; backdrop-filter: blur(10px); }
-    [data-testid="stFileUploadDropzone"] { border: 2px dashed rgba(129, 140, 248, 0.5) !important; background-color: rgba(15, 23, 42, 0.3) !important; border-radius: 12px !important; }
+    div[data-testid="stContainer"] { 
+        border: 1px solid rgba(255, 255, 255, 0.1) !important; 
+        background-color: rgba(30, 41, 59, 0.4) !important; 
+        backdrop-filter: blur(10px); 
+    }
+    [data-testid="stFileUploadDropzone"] { 
+        border: 2px dashed rgba(129, 140, 248, 0.5) !important; 
+        background-color: rgba(15, 23, 42, 0.3) !important; 
+        border-radius: 12px !important; 
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -61,7 +109,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 MODEL_NAME = "gemini-3.1-flash-lite" 
 
-# F5를 눌러도 st.query_params에 이메일이 남아있으면 자동 로그인 유지
+# F5 방어 로직
 if st.session_state.get("user") is None and "logged_in_email" in st.query_params:
     saved_email = st.query_params["logged_in_email"]
     response = supabase.table("users").select("*").eq("email", saved_email).execute()
@@ -107,17 +155,17 @@ def show_pricing_modal():
                 st.link_button("Pro 구독하기", final_checkout_link, type="primary", use_container_width=True)
 
 # ============================================================
-# 🚪 4. 랜딩 페이지 (로그인 안 했을 때만 표시 - 550px 칼고정)
+# 🚪 4. 랜딩 페이지 — 문제의 min-width 1200px 제거!
 # ============================================================
 if st.session_state.get("user") is None:
     st.markdown("""
     <style>
+        /* 🔧 수정: min-width 1200px 제거 (이게 사이드바를 밀어내던 원인!) */
         div[data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
             align-items: center !important;
-            min-width: 1200px !important;
         }
-        /* 좌측 550px 완벽 고정 & 수직선 추가 */
+        /* 좌측 컬럼 550px 고정 */
         div[data-testid="column"]:first-child {
             flex: 0 0 550px !important; 
             border-right: 1px solid rgba(255, 255, 255, 0.2);
@@ -156,7 +204,6 @@ if st.session_state.get("user") is None:
                     insert_res = supabase.table("users").insert(new_user).execute()
                     st.session_state["user"] = insert_res.data[0]
                 
-                # 로그인 성공 시 주소창에 이메일 기록 (F5 방어)
                 st.query_params["logged_in_email"] = email_input
                 st.rerun()  
 
@@ -169,14 +216,11 @@ if st.session_state.get("user") is None:
     st.stop() 
 
 # ============================================================
-# 👤 5. 유저 사이드바 (완벽 복구 완료!)
+# 👤 5. 유저 사이드바
 # ============================================================
 user_data = st.session_state.get("user", {})
 
 with st.sidebar:
-    # 🚨 혹시 배경색이 날아갔을까 봐 사이드바 배경색 확실히 지정
-    st.markdown("""<style>[data-testid="stSidebar"] {background-color: #1e293b !important; border-right: 1px solid rgba(255,255,255,0.1);}</style>""", unsafe_allow_html=True)
-    
     st.markdown(f"**👤 계정**: {user_data.get('email', '')}")
     st.markdown(f"**💳 플랜**: {user_data.get('plan_type', '')}")
 
@@ -232,17 +276,20 @@ def build_prompt(text: str, mode: str) -> str:
 {text}"""
 
 # ============================================================
-# ⚙️ 7. 메인 화면: 파일 업로드 및 컨트롤러 (하단 완벽 정렬)
+# ⚙️ 7. 메인 화면: 파일 업로드 (PPTX 추가!)
 # ============================================================
 top_left, top_right = st.columns(2, gap="large")
 
 with top_left:
     st.title("📄 쉬운 문서 해석기")
     st.caption("어려운 기술 문서, 불필요한 사설 없이 핵심만 명확하게 짚어드립니다.")
-    uploaded_file = st.file_uploader("문서 파일 업로드 (PDF, TXT, DOCX)", type=["pdf", "txt", "docx"])
+    # 🆕 PPTX 추가
+    uploaded_file = st.file_uploader(
+        "문서 파일 업로드 (PDF, TXT, DOCX, PPTX)", 
+        type=["pdf", "txt", "docx", "pptx"]
+    )
 
 with top_right:
-    # 💡 margin-top 48px로 왼쪽 업로드 박스 밑바닥과 칼같이 맞춤
     st.markdown("<div style='margin-top: 48px;'></div>", unsafe_allow_html=True) 
     with st.container(border=True):
         st.markdown("### 해석 컨트롤러")
@@ -258,7 +305,7 @@ if uploaded_file is None:
     st.stop()
 
 # ============================================================
-# ⚙️ 8. 파일 파싱 및 하단 뷰어 로직 
+# ⚙️ 8. 파일 파싱 — PPTX 처리 추가
 # ============================================================
 file_id = f"{uploaded_file.name}_{uploaded_file.size}"
 file_ext = uploaded_file.name.split('.')[-1].lower()
@@ -275,7 +322,46 @@ if st.session_state.get("file_id") != file_id:
                 page_images.append(pix.tobytes("png"))
                 page_texts.append(page.get_text())
             doc.close()
+        
+        # 🆕 PPTX 처리 — 슬라이드 = 페이지
+        elif file_ext == "pptx":
+            prs = Presentation(io.BytesIO(uploaded_file.read()))
+            for slide_idx, slide in enumerate(prs.slides, start=1):
+                slide_parts = []
+                
+                # 1) 일반 텍스트 박스에서 텍스트 추출
+                for shape in slide.shapes:
+                    if shape.has_text_frame:
+                        for para in shape.text_frame.paragraphs:
+                            para_text = "".join(run.text for run in para.runs)
+                            if para_text.strip():
+                                slide_parts.append(para_text)
+                
+                # 2) 표 안에 있는 텍스트도 추출
+                for shape in slide.shapes:
+                    if shape.has_table:
+                        for row in shape.table.rows:
+                            row_text = " | ".join(
+                                cell.text.strip() 
+                                for cell in row.cells 
+                                if cell.text.strip()
+                            )
+                            if row_text:
+                                slide_parts.append(row_text)
+                
+                # 3) 슬라이드 노트(발표자 메모)도 함께 해석에 활용
+                if slide.has_notes_slide:
+                    notes = slide.notes_slide.notes_text_frame.text.strip()
+                    if notes:
+                        slide_parts.append(f"\n[발표자 노트]\n{notes}")
+                
+                slide_full = "\n".join(slide_parts) if slide_parts else "(빈 슬라이드)"
+                page_texts.append(f"[슬라이드 {slide_idx} / {len(prs.slides)}]\n\n{slide_full}")
+            
+            page_images = [None] * len(page_texts)
+        
         else:
+            # TXT / DOCX 처리
             raw_text = ""
             if file_ext == "txt":
                 raw_bytes = uploaded_file.read()
@@ -285,8 +371,10 @@ if st.session_state.get("file_id") != file_id:
                 doc_file = docx.Document(io.BytesIO(uploaded_file.read()))
                 raw_text = "\n".join([para.text for para in doc_file.paragraphs])
             chunk_size = 1500
-            if not raw_text.strip(): page_texts = ["(내용이 없습니다)"]
-            else: page_texts = [raw_text[i:i+chunk_size] for i in range(0, len(raw_text), chunk_size)]
+            if not raw_text.strip(): 
+                page_texts = ["(내용이 없습니다)"]
+            else: 
+                page_texts = [raw_text[i:i+chunk_size] for i in range(0, len(raw_text), chunk_size)]
             page_images = [None] * len(page_texts)
 
     st.session_state["file_id"] = file_id
@@ -298,20 +386,35 @@ total_pages = st.session_state.get("total_pages", 1)
 page_images = st.session_state.get("page_images", [])
 page_texts = st.session_state.get("page_texts", [])
 
-st.success(f"✅ 총 {total_pages} 페이지 로드 완료")
+# 🆕 PPTX는 '슬라이드'로 표기
+unit_label = "슬라이드" if file_ext == "pptx" else "페이지"
+st.success(f"✅ 총 {total_pages} {unit_label} 로드 완료")
 st.divider()
 
 col_pdf, col_result = st.columns([1, 1], gap="large")
 
 with col_pdf:
     st.markdown(f"### {file_ext.upper()} 원본")
-    view_page = st.number_input("📄 이동할 페이지 번호 입력", min_value=1, max_value=total_pages, value=1, step=1)
+    view_page = st.number_input(
+        f"📄 이동할 {unit_label} 번호 입력", 
+        min_value=1, max_value=total_pages, value=1, step=1
+    )
     
     with st.container(height=800, border=True):
         if page_images and page_images[view_page - 1] is not None:
-            st.image(page_images[view_page - 1], caption=f"━━━ 페이지 {view_page} / {total_pages} ━━━", use_container_width=True)
+            st.image(
+                page_images[view_page - 1], 
+                caption=f"━━━ {unit_label} {view_page} / {total_pages} ━━━", 
+                use_container_width=True
+            )
         elif page_texts:
-            st.text_area("문서 내용", page_texts[view_page - 1], height=700, disabled=True, label_visibility="collapsed")
+            st.text_area(
+                "문서 내용", 
+                page_texts[view_page - 1], 
+                height=700, 
+                disabled=True, 
+                label_visibility="collapsed"
+            )
 
 cache_key = f"{file_id}_{view_page}_{selected_mode}"
 is_cached = cache_key in st.session_state.get("interpret_cache", {})
@@ -321,10 +424,18 @@ with col_result:
     
     status_col, btn_col = st.columns([3, 2])
     with status_col:
-        st.text_input("✨ 현재 상태", value="🟢 메모리에서 불러옴" if is_cached else "⏳ 해석 대기 중", disabled=True)
+        st.text_input(
+            "✨ 현재 상태", 
+            value="🟢 메모리에서 불러옴" if is_cached else "⏳ 해석 대기 중", 
+            disabled=True
+        )
     with btn_col:
         st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-        interpret_btn = st.button("✨ 현재 페이지 해석", type="primary" if not is_cached else "secondary", use_container_width=True)
+        interpret_btn = st.button(
+            f"✨ 현재 {unit_label} 해석", 
+            type="primary" if not is_cached else "secondary", 
+            use_container_width=True
+        )
     
     with st.container(height=800, border=True):
         if interpret_btn and not is_cached:
@@ -337,7 +448,10 @@ with col_result:
                 else:
                     try:
                         genai.configure(api_key=GEMINI_API_KEY)
-                        model = genai.GenerativeModel(MODEL_NAME, generation_config=genai.types.GenerationConfig(max_output_tokens=8192))
+                        model = genai.GenerativeModel(
+                            MODEL_NAME, 
+                            generation_config=genai.types.GenerationConfig(max_output_tokens=8192)
+                        )
                         
                         current_user = st.session_state.get("user", {})
                         is_admin = (current_user.get('plan_type') == 'ADMIN')
@@ -361,4 +475,4 @@ with col_result:
         if is_cached:
             st.markdown(st.session_state["interpret_cache"][cache_key])
         elif not interpret_btn:
-            st.info("👆 상단의 **[✨ 현재 페이지 해석]** 버튼을 눌러주세요.")
+            st.info(f"👆 상단의 **[✨ 현재 {unit_label} 해석]** 버튼을 눌러주세요.")
