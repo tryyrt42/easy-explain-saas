@@ -17,33 +17,28 @@ SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ============================================================
-# 🔒 [5단계] 로그인 시스템 - 나노 바나나 AI 프리미엄 랜딩 페이지
+# 🔒 [5단계] 로그인 시스템 - CSS 애니메이션 배경 버전
 # ============================================================
 if "user" not in st.session_state:
     st.session_state.user = None
 
 # 로그인되어 있지 않다면 고급 랜딩 페이지+로그인 화면을 보여주고 멈춤
 if st.session_state.user is None:
-    # 1. 화면 전체를 좌/우 2칸으로 꽉 차게 나눕니다. (SaaS 표준 고급 레이아웃)
+    # 1. 화면 전체를 좌/우 2칸으로 꽉 차게 나눕니다.
     col_marketing, col_login = st.columns([1.2, 1], gap="large")
     
     with col_marketing:
-        # 좌측: 강력한 비주얼과 가치 제안 (마케팅 존)
-        st.markdown("<div style='margin-top: 10vh;'></div>", unsafe_allow_html=True) # 수직 중앙 정렬용
+        # 좌측: 꿀렁이는 CSS 배경 위에 텍스트만 깔끔하게 올립니다.
+        st.markdown("<div style='margin-top: 15vh;'></div>", unsafe_allow_html=True) 
         
-        # 💡 [핵심] 나노 단위의 초정밀 분석을 시각화한 고급 그래픽 배치
-        # 이미지는 미리 생성해서 프로젝트 폴더에 'hero_tech_graphic.png'로 저장해두어야 합니다.
-        st.image("hero_tech_graphic.png", use_container_width=True) 
+        # 💡 (사진 넣는 st.image 부분 완벽하게 삭제!)
         
-        st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
-        
-        # 강력한 카피라이팅 (나노 바나나의 정체성 시각화)
-        # 이모티콘 100% 제거, 전문적인 텍스트만 사용
+        # 배경색이 어두워졌으니 글자색을 약간 더 밝게(흰색 톤) 조정했습니다.
         st.markdown("""
-        <h1 style='background: linear-gradient(90deg, #d8b4fe, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800; font-size: 3rem; line-height: 1.1;'>나노 단위의 정밀함.<br>바나나처럼 쉬운 명쾌함.</h1>
-        <p style='color: #94a3b8; font-size: 1.25rem; margin-top: 1.5rem; margin-bottom: 2rem; max-width: 500px;'>복잡한 기술 문서, 더 이상 시간 낭비하지 마십시오. 나노 바나나 AI가 수천 페이지의 PDF, DOCX, TXT 문서를 단 몇 초 만에 나노 단위로 분석하여 핵심만 명쾌하게 해석해 드립니다.</p>
+        <h1 style='background: linear-gradient(90deg, #d8b4fe, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800; font-size: 3.5rem; line-height: 1.2;'>나노 단위의 정밀함.<br>바나나처럼 쉬운 명쾌함.</h1>
+        <p style='color: #f8fafc; font-size: 1.25rem; margin-top: 1.5rem; margin-bottom: 2rem; max-width: 500px;'>복잡한 기술 문서, 더 이상 시간 낭비하지 마십시오. 나노 바나나 AI가 수천 페이지의 PDF, DOCX, TXT 문서를 단 몇 초 만에 나노 단위로 분석하여 핵심만 명쾌하게 해석해 드립니다.</p>
         
-        <div style='display: flex; gap: 15px; color: #cbd5e1; font-weight: 600;'>
+        <div style='display: flex; gap: 15px; color: #e2e8f0; font-weight: 600; font-size: 1.05rem;'>
             <span>✓ PDF 원문 렌더링</span>
             <span>✓ DOCX/TXT 완벽 지원</span>
             <span>✓ Gemini Flash 엔진</span>
@@ -52,42 +47,34 @@ if st.session_state.user is None:
 
     with col_login:
         # 우측: 세련된 로그인 폼 (유리 상자 적용)
-        st.markdown("<div style='margin-top: 15vh;'></div>", unsafe_allow_html=True) # 수직 중앙 정렬용
+        st.markdown("<div style='margin-top: 15vh;'></div>", unsafe_allow_html=True)
         
-        # 기존에 적용해 둔 유리 상자 CSS가 발동하도록 container 안에 넣습니다.
         with st.container(border=True):
             st.markdown("<h2 style='text-align: center; font-weight: 700; margin-bottom: 0.5rem;'>계정 인증 및 시작</h2>", unsafe_allow_html=True)
-            st.markdown("<p style='text-align: center; color: #94a3b8; font-size: 1rem; margin-bottom: 2.5rem;'>인증된 이메일을 입력하여 나노 바나나 AI의 강력한 기능을 즉시 이용해 보세요.</p>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align: center; color: #94a3b8; font-size: 1rem; margin-bottom: 2.5rem;'>인증된 이메일을 입력하여 강력한 기능을 즉시 이용해 보세요.</p>", unsafe_allow_html=True)
             
             st.markdown("### 이메일 입력")
-            st.markdown("<p style='color: #cbd5e1; font-size: 0.95rem; margin-bottom: 2rem;'>서비스 이용을 시작하려면 인증된 이메일을 입력해주세요.</p>", unsafe_allow_html=True)
             
-            # 입력창을 깔끔하게 다듬고 안내 문구(placeholder)를 전문적으로 넣습니다.
             email_input = st.text_input("이메일 주소", placeholder="user@company.com", label_visibility="collapsed")
             
             st.markdown("<div style='margin-top: 20px;'></div>", unsafe_allow_html=True)
             
-            # 3. 버튼에 type="primary"를 줘서 그라데이션을 입히고, 폭을 100%로 꽉 채웁니다. (이모티콘 제거)
-            # 텍스트를 좀 더 신뢰감 있게 바꿉니다.
             login_btn = st.button("인증 및 워크플로우 시작", type="primary", use_container_width=True)
             
             if login_btn and email_input:
-                # 1. DB에 유저가 있는지 확인
                 response = supabase.table("users").select("*").eq("email", email_input).execute()
                 
                 if len(response.data) > 0:
-                    # 2. 기존 가입자면 정보 가져오기
                     st.session_state.user = response.data[0]
                 else:
-                    # 3. 처음 온 사람이면 DB에 새로 등록 (기본 FREE 플랜)
                     new_user = {"email": email_input, "plan_type": "FREE", "used_pages": 0}
                     insert_res = supabase.table("users").insert(new_user).execute()
                     st.session_state.user = insert_res.data[0]
                     
                 st.success("✅ 로그인 성공!")
-                st.rerun()  # 화면을 새로고침해서 메인 앱으로 진입
+                st.rerun()  
                 
-    st.stop() # 로그인을 안 했으면 이 아래 코드(메인 앱)는 절대 실행되지 않음
+    st.stop()
 
 # ============================================================
 # 👤 유저 상태창 (사이드바)
