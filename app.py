@@ -73,6 +73,54 @@ st.set_page_config(
     page_icon="📄",
     layout="wide",
 )
+
+# 👇👇 여기서부터 추가! 고급스러운 UI를 위한 커스텀 CSS 주입 👇👇
+st.markdown("""
+<style>
+    /* 1. 메인 타이틀 그라데이션 텍스트 효과 */
+    h1 {
+        background: linear-gradient(90deg, #d8b4fe, #818cf8);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 800 !important;
+    }
+    
+    /* 2. Primary 버튼 (결제, 해석하기) 고급 그라데이션 & 네온 그림자 효과 */
+    button[kind="primary"] {
+        background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important;
+        border: none !important;
+        color: white !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4) !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    /* Primary 버튼에 마우스 올렸을 때 살짝 떠오르는 애니메이션 */
+    button[kind="primary"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(168, 85, 247, 0.6) !important;
+    }
+    
+    /* 3. 컨테이너(박스) 테두리를 부드럽게 만들고 아주 얇은 형광 라인 추가 */
+    [data-testid="stVerticalBlock"] > div > div {
+        border-radius: 12px;
+    }
+    div[data-testid="stContainer"] {
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        background-color: rgba(30, 41, 59, 0.5) !important;
+        backdrop-filter: blur(10px); /* 반투명 유리 효과 */
+    }
+    
+    /* 4. 파일 업로더 점선 테두리 고급화 */
+    [data-testid="stFileUploadDropzone"] {
+        border: 2px dashed rgba(129, 140, 248, 0.5) !important;
+        background-color: rgba(15, 23, 42, 0.3) !important;
+        border-radius: 12px !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+# 👆👆 커스텀 CSS 주입 끝 👆👆
 # ============================================================
 # 💎 요금제 및 결제 안내 UI
 # ============================================================
