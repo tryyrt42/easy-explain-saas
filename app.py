@@ -123,44 +123,23 @@ def show_pricing_modal():
                 st.link_button("Pro 구독하기", final_checkout_link, type="primary", use_container_width=True)
 
 # ============================================================
-# 🔒 3. 로그인 시스템 및 안전한 Secrets 키 관리
+# 🔒 3. 로그인 시스템 - [좌측: 설명+로그인 / 우측: 결과 스샷] 구성
 # ============================================================
-SUPABASE_URL = "https://nufvazmyuvhqkeysfwla.supabase.co"
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-MODEL_NAME = "gemini-3.1-flash-lite" 
-
-if "user" not in st.session_state:
-    st.session_state.user = None
-
 if st.session_state.user is None:
-    # 💡 [추가됨] 3칸으로 나누어 맨 우측에 빈 공간(col_spacer)을 할당합니다. 
-    # 이렇게 하면 화면이 아무리 커져도 로그인 박스가 왼쪽 텍스트 구역으로 밀착됩니다.
-    col_marketing, col_login, col_spacer = st.columns([1.3, 1, 1.2], gap="large")
+    # 💡 좌우 비율 조정 (마케팅+로그인 : 결과 스샷)
+    col_left, col_right = st.columns([1, 1.2], gap="large")
     
-    with col_marketing:
-        st.markdown("<div style='margin-top: 15vh;'></div>", unsafe_allow_html=True) 
+    with col_left:
+        # 1. 상단 설명 문구 (최상단 배치)
         st.markdown("""
         <h1 style='font-size: 3.2rem; line-height: 1.3;'>어려운 기술 문서,<br>이제 가장 쉽게 읽으세요.</h1>
-        <p style='color: #f8fafc; font-size: 1.15rem; margin-top: 1.5rem; margin-bottom: 2rem; max-width: 500px; line-height: 1.6;'>수백 페이지의 복잡한 영문 매뉴얼과 기술 문서, 더 이상 번역기 돌리며 고통받지 마세요. 문서를 업로드만 하면 AI가 핵심만 짚어 가장 이해하기 쉬운 한글로 설명해 드립니다.</p>
-        
-        <div style='display: flex; gap: 15px; color: #e2e8f0; font-weight: 600; font-size: 1.05rem;'>
-            <span>✓ 복잡한 원문 완벽 분석</span>
-            <span>✓ 1타 강사 & 동네 형 모드</span>
-            <span>✓ 압도적인 해석 속도</span>
-        </div>
+        <p style='color: #f8fafc; font-size: 1.15rem; margin-top: 1.5rem; margin-bottom: 2rem;'>복잡한 영문 매뉴얼, 번역기 돌리며 고생하지 마세요. AI가 핵심만 짚어 가장 이해하기 쉬운 한글로 설명해 드립니다.</p>
         """, unsafe_allow_html=True)
-
-    with col_login:
-        st.markdown("<div style='margin-top: 15vh;'></div>", unsafe_allow_html=True)
+        
+        # 2. 문서 해석 시작하기 칸 (설명 아래로 이동)
         with st.container(border=True):
-            st.markdown("<h3 style='text-align: center; font-weight: 700; margin-bottom: 0.5rem;'>문서 해석 시작하기</h3>", unsafe_allow_html=True)
-            st.markdown("<p style='text-align: center; color: #94a3b8; font-size: 0.95rem; margin-bottom: 2.5rem;'>이메일만 입력하면 지금 바로 무료로 체험해 볼 수 있습니다.</p>", unsafe_allow_html=True)
-            
+            st.markdown("<h3 style='text-align: center; font-weight: 700;'>문서 해석 시작하기</h3>", unsafe_allow_html=True)
             email_input = st.text_input("이메일 주소", placeholder="example@email.com", label_visibility="collapsed")
-            st.markdown("<div style='margin-top: 20px;'></div>", unsafe_allow_html=True)
             login_btn = st.button("✨ 이메일로 간편하게 시작하기", type="primary", use_container_width=True)
             
             if login_btn and email_input:
@@ -171,13 +150,24 @@ if st.session_state.user is None:
                     new_user = {"email": email_input, "plan_type": "FREE", "used_pages": 0}
                     insert_res = supabase.table("users").insert(new_user).execute()
                     st.session_state.user = insert_res.data[0]
-                    
-                st.success("✅ 로그인 성공!")
                 st.rerun()  
-                
-    # col_spacer는 화면 레이아웃을 밀어주는 역할만 하므로 내용은 비워둡니다.
-    with col_spacer:
-        pass
+
+    with col_right:
+        # 3. 우측: 결과물 스샷 (테두리 흐릿/곡선 효과)
+        st.markdown("<div style='margin-top: 5vh;'></div>", unsafe_allow_html=True)
+        st.markdown("""
+        <style>
+            .result-screenshot {
+                border-radius: 20px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+                filter: drop-shadow(0px 0px 10px rgba(129, 140, 248, 0.3));
+                border: 1px solid rgba(255,255,255,0.1);
+            }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # 'result_preview.png' 파일을 프로젝트 폴더에 넣어주세요
+        st.image("result_preview.png", caption="AI가 분석한 정밀 해석 예시", use_container_width=True, output_format="PNG")
         
     st.stop()
 
