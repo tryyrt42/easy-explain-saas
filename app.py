@@ -1,7 +1,7 @@
 """
-쉬운 문서 해석기 — PRO 최종 통합본 (사이드바 문짝 완벽 복구)
-- 버그 수정: stHeader 전체 숨김 코드를 삭제하고, 우측 툴바만 핀포인트 삭제
-- 유지 사항: F5 새로고침 방어, 로그인 창 550px 고정, 컨트롤러 하단 정렬 유지
+쉬운 문서 해석기 — PRO 최종 안정화 버전 (사이드바 증발 버그 영구 해결)
+- 치명적 버그 수정: 시스템 UI를 가리던 독성 CSS 제거 및 사이드바 버튼 명시적 복구
+- 유지 사항: F5 새로고침 세션 유지, 랜딩 페이지 550px 고정, 컨트롤러 정렬
 """
 import docx  
 import io    
@@ -11,7 +11,7 @@ import google.generativeai as genai
 from supabase import create_client, Client
 
 # ============================================================
-# ⚙️ 1. 페이지 설정 및 전역 스타일 주입
+# ⚙️ 1. 페이지 설정 (사이드바 무조건 확장 상태로 시작)
 # ============================================================
 st.set_page_config(
     page_title="쉬운 문서 해석기",
@@ -26,13 +26,23 @@ if "user" not in st.session_state:
 if "interpret_cache" not in st.session_state:
     st.session_state["interpret_cache"] = {}
 
-# 💡 전역 CSS (사이드바 버튼을 날려버리던 악성 코드를 완전히 제거했습니다!)
+# 💡 전역 CSS (사이드바를 날려버리던 코드를 싹 지우고, 안전한 스타일만 남겼습니다)
 st.markdown("""
 <style>
-    .stApp { background-color: #0f172a; overflow-x: hidden; }
-    /* 🚨 우측 상단 툴바(별모양, 깃허브 등)만 정확하게 숨김! 사이드바 토글 버튼은 건드리지 않음! */
-    [data-testid="stToolbar"], [data-testid="stActionElements"] { display: none !important; }
+    /* 배경 및 기본 스타일 */
+    .stApp { background-color: #0f172a; }
     
+    /* 🚨 스트림릿 상단 시스템 헤더는 투명하게만 만들고 절대 지우지 않음 (사이드바 버튼 보호) */
+    header[data-testid="stHeader"] { background: transparent !important; }
+    
+    /* 거슬리는 Deploy 버튼 등만 핀포인트로 안전하게 제거 */
+    .stDeployButton { display: none !important; }
+    [data-testid="stToolbar"] { display: none !important; }
+    
+    /* 🚨 사이드바 열기/닫기 버튼 무조건 강제 노출 */
+    [data-testid="collapsedControl"] { display: flex !important; visibility: visible !important; }
+    
+    /* 컴포넌트 디자인 */
     h1 { background: linear-gradient(90deg, #d8b4fe, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
     button[kind="primary"] { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important; border: none !important; color: white !important; font-weight: 600 !important; border-radius: 8px !important; box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4) !important; transition: all 0.3s ease !important; }
     button[kind="primary"]:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(168, 85, 247, 0.6) !important; }
@@ -43,7 +53,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# 🔒 2. Supabase 연결 및 [핵심] F5 새로고침 방어 로직
+# 🔒 2. Supabase 연결 및 F5 새로고침 방어 로직
 # ============================================================
 SUPABASE_URL = "https://nufvazmyuvhqkeysfwla.supabase.co"
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
@@ -51,7 +61,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 MODEL_NAME = "gemini-3.1-flash-lite" 
 
-# F5를 눌러도 st.query_params에 이메일이 남아있으면 자동 로그인 처리
+# F5를 눌러도 st.query_params에 이메일이 남아있으면 자동 로그인 유지
 if st.session_state.get("user") is None and "logged_in_email" in st.query_params:
     saved_email = st.query_params["logged_in_email"]
     response = supabase.table("users").select("*").eq("email", saved_email).execute()
@@ -146,7 +156,7 @@ if st.session_state.get("user") is None:
                     insert_res = supabase.table("users").insert(new_user).execute()
                     st.session_state["user"] = insert_res.data[0]
                 
-                # 핵심: 로그인 성공 시 브라우저 주소창에 이메일 기록 (F5 방어)
+                # 로그인 성공 시 주소창에 이메일 기록 (F5 방어)
                 st.query_params["logged_in_email"] = email_input
                 st.rerun()  
 
@@ -159,11 +169,14 @@ if st.session_state.get("user") is None:
     st.stop() 
 
 # ============================================================
-# 👤 5. 유저 사이드바 (정상 작동 보장!)
+# 👤 5. 유저 사이드바 (완벽 복구 완료!)
 # ============================================================
 user_data = st.session_state.get("user", {})
 
 with st.sidebar:
+    # 🚨 혹시 배경색이 날아갔을까 봐 사이드바 배경색 확실히 지정
+    st.markdown("""<style>[data-testid="stSidebar"] {background-color: #1e293b !important; border-right: 1px solid rgba(255,255,255,0.1);}</style>""", unsafe_allow_html=True)
+    
     st.markdown(f"**👤 계정**: {user_data.get('email', '')}")
     st.markdown(f"**💳 플랜**: {user_data.get('plan_type', '')}")
 
@@ -219,7 +232,7 @@ def build_prompt(text: str, mode: str) -> str:
 {text}"""
 
 # ============================================================
-# ⚙️ 7. 메인 화면: 파일 업로드 및 컨트롤러 
+# ⚙️ 7. 메인 화면: 파일 업로드 및 컨트롤러 (하단 완벽 정렬)
 # ============================================================
 top_left, top_right = st.columns(2, gap="large")
 
@@ -229,7 +242,7 @@ with top_left:
     uploaded_file = st.file_uploader("문서 파일 업로드 (PDF, TXT, DOCX)", type=["pdf", "txt", "docx"])
 
 with top_right:
-    # 💡 margin-top을 48px로 세밀 조정하여 왼쪽 업로드 박스 밑바닥과 칼같이 맞춤
+    # 💡 margin-top 48px로 왼쪽 업로드 박스 밑바닥과 칼같이 맞춤
     st.markdown("<div style='margin-top: 48px;'></div>", unsafe_allow_html=True) 
     with st.container(border=True):
         st.markdown("### 해석 컨트롤러")
