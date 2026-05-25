@@ -124,6 +124,19 @@ st.markdown("""
         background-color: rgba(15, 23, 42, 0.3) !important; 
         border-radius: 12px !important; 
     }
+    
+    /* === 🎯 업로더 ↔ 컨트롤러 하단 자동 정렬 (반응형 보장) === */
+    /* :has()로 파일 업로더가 포함된 row만 타겟 — PDF/결과 패널에는 영향 없음 */
+    div[data-testid="stHorizontalBlock"]:has([data-testid="stFileUploader"]) {
+        align-items: flex-end !important;
+    }
+    /* 안의 컬럼들이 stretch되지 않고 자기 내용 높이만큼만 차지하도록 */
+    div[data-testid="stHorizontalBlock"]:has([data-testid="stFileUploader"]) 
+    > div[data-testid="column"],
+    div[data-testid="stHorizontalBlock"]:has([data-testid="stFileUploader"]) 
+    > div[data-testid="stColumn"] {
+        align-self: flex-end !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -317,8 +330,7 @@ with top_left:
     )
 
 with top_right:
-    # 💡 margin-top 155px로 왼쪽 업로드 박스 밑바닥과 정확히 정렬
-    st.markdown("<div style='margin-top: 155px;'></div>", unsafe_allow_html=True) 
+    # 💡 margin-top 안 씀! 부모 row의 align-items: flex-end가 자동 정렬해줌 (반응형)
     with st.container(border=True):
         st.markdown("### 해석 컨트롤러")
         selected_mode = st.selectbox(
