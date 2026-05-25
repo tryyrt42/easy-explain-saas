@@ -1,8 +1,8 @@
 """
-쉬운 문서 해석기 — PRO 최종 통합본 (UI 정밀 타격 보정)
-- UI 보정 1: 랜딩 페이지 좌측 구역 550px로 넓혀서 완벽 고정 (수직선 유지)
-- UI 보정 2: 사이드바 숨김 버그 해결 (정상적인 토글 버튼 복구)
-- UI 보정 3: 메인 화면 해석 컨트롤러 하단 라인 완벽 정렬
+쉬운 문서 해석기 — PRO 진짜 최종 통합본 (스트림릿 한계 극복판)
+- F5 새로고침 방어: st.query_params를 이용한 세션 유지 완벽 구현
+- UI 복구: 사이드바 토글 버튼 증발 버그 해결
+- 레이아웃 고정: 랜딩 페이지 좌측 400px 칼고정 / 메인 화면 컨트롤러 하단 정렬
 """
 import docx  
 import io    
@@ -12,24 +12,22 @@ import google.generativeai as genai
 from supabase import create_client, Client
 
 # ============================================================
-# ⚙️ 1. 페이지 설정 및 전역 스타일 주입
+# ⚙️ 1. 페이지 설정 (사이드바 확장 기본값 세팅)
 # ============================================================
 st.set_page_config(
     page_title="쉬운 문서 해석기",
     page_icon="📄",
     layout="wide",
+    initial_sidebar_state="expanded" # 💡 사이드바 무조건 열어두기!
 )
 
-if "user" not in st.session_state:
-    st.session_state["user"] = None
-if "interpret_cache" not in st.session_state:
-    st.session_state["interpret_cache"] = {}
-
-# 💡 전역 CSS (사이드바 버그를 유발하던 코드를 걷어내고 순수 스타일만 남김)
+# 💡 독성 CSS 모두 걷어내고 필수 디자인만 남김 (사이드바 버튼 증발 방지)
 st.markdown("""
 <style>
-    .stApp { background-color: #0f172a; overflow-x: hidden; }
-    [data-testid="stToolbar"] { visibility: hidden !important; }
+    .stApp { background-color: #0f172a; }
+    /* 상단 기본 툴바(Deploy, 깃허브 등)만 깔끔하게 제거 */
+    header[data-testid="stHeader"] { display: none !important; }
+    
     h1 { background: linear-gradient(90deg, #d8b4fe, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
     button[kind="primary"] { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important; border: none !important; color: white !important; font-weight: 600 !important; border-radius: 8px !important; box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4) !important; transition: all 0.3s ease !important; }
     button[kind="primary"]:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(168, 85, 247, 0.6) !important; }
@@ -40,7 +38,30 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# 💎 2. 요금제 팝업(모달) 창
+# 🔒 2. Supabase 연결 및 [핵심] F5 새로고침 방어 로직
+# ============================================================
+SUPABASE_URL = "https://nufvazmyuvhqkeysfwla.supabase.co"
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+MODEL_NAME = "gemini-3.1-flash-lite" 
+
+if "user" not in st.session_state:
+    st.session_state["user"] = None
+if "interpret_cache" not in st.session_state:
+    st.session_state["interpret_cache"] = {}
+
+# 💡 F5를 눌러도 st.query_params에 이메일이 남아있으면 자동 로그인 처리!
+if st.session_state["user"] is None and "logged_in_email" in st.query_params:
+    saved_email = st.query_params["logged_in_email"]
+    response = supabase.table("users").select("*").eq("email", saved_email).execute()
+    if len(response.data) > 0:
+        st.session_state["user"] = response.data[0]
+    else:
+        st.query_params.clear()
+
+# ============================================================
+# 💎 3. 요금제 팝업(모달) 창
 # ============================================================
 @st.dialog("💎 플랜 업그레이드 안내")
 def show_pricing_modal():
@@ -51,14 +72,7 @@ def show_pricing_modal():
         with st.container(height=420, border=True):
             st.subheader("FREE")
             st.markdown("## ₩ 0 / 월")
-            st.markdown(
-                """<div style='min-height: 180px; color: #94a3b8;'>
-                ✔️ <b>매월 3장</b> 해석 제공<br>
-                ✔️ 기본 문서 텍스트 추출<br>
-                ✔️ 일반 속도 처리
-                </div>""", 
-                unsafe_allow_html=True
-            )
+            st.markdown("""<div style='min-height: 180px; color: #94a3b8;'>✔️ <b>매월 3장</b> 해석 제공<br>✔️ 기본 문서 텍스트 추출<br>✔️ 일반 속도 처리</div>""", unsafe_allow_html=True)
             if st.session_state["user"]['plan_type'] == 'FREE':
                 st.button("현재 이용 중", disabled=True, key="modal_free_btn", use_container_width=True)
             else:
@@ -68,14 +82,7 @@ def show_pricing_modal():
         with st.container(height=420, border=True):
             st.subheader("PRO (인기)")
             st.markdown("## ₩ 9,900 / 월")
-            st.markdown(
-                """<div style='min-height: 180px; color: #94a3b8;'>
-                ✔️ <b>월 1,000장 해석 제공</b><br>
-                ✔️ 1타 강사 / 비유 모드 완벽 지원<br>
-                ✔️ 한도 초과 스트레스 없는 쾌적함
-                </div>""", 
-                unsafe_allow_html=True
-            )
+            st.markdown("""<div style='min-height: 180px; color: #94a3b8;'>✔️ <b>월 1,000장 해석 제공</b><br>✔️ 1타 강사 / 비유 모드 완벽 지원<br>✔️ 한도 초과 스트레스 없는 쾌적함</div>""", unsafe_allow_html=True)
             BASE_CHECKOUT_LINK = "https://easy-explain-saas.lemonsqueezy.com/checkout/buy/7a87b27c-335a-42c9-9995-54eb03fb49a3"
             current_user_email = st.session_state["user"]['email']
             final_checkout_link = f"{BASE_CHECKOUT_LINK}?checkout[email]={current_user_email}"
@@ -88,56 +95,42 @@ def show_pricing_modal():
                 st.link_button("Pro 구독하기", final_checkout_link, type="primary", use_container_width=True)
 
 # ============================================================
-# 🔒 3. 로그인 시스템 (비율 550px 완벽 고정)
+# 🚪 4. 랜딩 페이지 (로그인 안 했을 때만 표시 - 400px 칼고정)
 # ============================================================
-SUPABASE_URL = "https://nufvazmyuvhqkeysfwla.supabase.co"
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-MODEL_NAME = "gemini-3.1-flash-lite" 
-
 if st.session_state["user"] is None:
-    # 💡 로그인 화면 전용 CSS (좌측 550px 고정, 우측 스크린샷 꽉 채움)
     st.markdown("""
     <style>
-        [data-testid="block-container"] {
-            min-width: 1400px !important;
-            padding-top: 5vh !important;
-        }
-        [data-testid="stHorizontalBlock"] {
+        /* 좌우 레이아웃 줄바꿈 방지 및 수직 중앙 정렬 */
+        div[data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
-            min-width: 1350px !important; 
+            align-items: center !important;
+            min-width: 1200px !important;
         }
-        /* 좌측 구역 550px 시멘트 고정 (용규님이 그려주신 빨간 박스 사이즈) */
+        /* 💡 좌측 400px 완벽 고정 & 수직선 추가 */
         div[data-testid="column"]:first-child {
-            width: 550px !important;
-            min-width: 550px !important;
-            max-width: 550px !important;
-            flex: 0 0 550px !important; 
-            border-right: 1px solid rgba(255, 255, 255, 0.25) !important;
-            padding-right: 40px !important;
-            margin-right: 40px !important;
+            flex: 0 0 400px !important; 
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+            padding-right: 3rem !important;
         }
+        /* 우측 사진은 남는 공간 전부 차지 */
         div[data-testid="column"]:nth-child(2) {
-            min-width: 800px !important;
-            flex: 1 1 800px !important;
+            flex: 1 1 auto !important;
+            padding-left: 3rem !important;
         }
+        /* 사진 테두리 네온 효과 */
         [data-testid="stImage"] img {
             border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
-            box-shadow: 0px 4px 40px rgba(129, 140, 248, 0.35) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0px 4px 40px rgba(129, 140, 248, 0.35);
         }
     </style>
     """, unsafe_allow_html=True)
 
-    col_left, col_right = st.columns(2)
+    col_left, col_right = st.columns([1, 2])
     
     with col_left:
-        st.markdown("<div style='margin-top: 5vh;'></div>", unsafe_allow_html=True)
-        st.markdown("""
-        <h1 style='font-size: 3.2rem; line-height: 1.3;'>어려운 기술 문서,<br>이제 가장 쉽게 읽으세요.</h1>
-        <p style='color: #f8fafc; font-size: 1.15rem; margin-top: 1.5rem; margin-bottom: 2.5rem;'>복잡한 영문 매뉴얼, 번역기 돌리며 고생하지 마세요. AI가 핵심만 짚어 가장 이해하기 쉬운 한글로 설명해 드립니다.</p>
-        """, unsafe_allow_html=True)
+        st.markdown("<h1 style='font-size: 3.2rem; line-height: 1.2;'>어려운 기술 문서,<br>이제 가장 쉽게 읽으세요.</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #f8fafc; font-size: 1.1rem; margin-top: 1.5rem; margin-bottom: 2.5rem;'>복잡한 영문 매뉴얼, 번역기 돌리며 고생하지 마세요. AI가 핵심만 짚어 가장 이해하기 쉬운 한글로 설명해 드립니다.</p>", unsafe_allow_html=True)
         
         with st.container(border=True):
             st.markdown("<h3 style='text-align: center; font-weight: 700;'>문서 해석 시작하기</h3>", unsafe_allow_html=True)
@@ -153,19 +146,21 @@ if st.session_state["user"] is None:
                     new_user = {"email": email_input, "plan_type": "FREE", "used_pages": 0}
                     insert_res = supabase.table("users").insert(new_user).execute()
                     st.session_state["user"] = insert_res.data[0]
+                
+                # 💡 핵심: 로그인 성공 시 브라우저 주소창에 이메일 기록 (F5 방어)
+                st.query_params["logged_in_email"] = email_input
                 st.rerun()  
 
     with col_right:
-        st.markdown("<div style='margin-top: 5vh;'></div>", unsafe_allow_html=True)
         try:
             st.image("result_preview.png", use_container_width=True, output_format="PNG")
         except:
-            st.info("💡 여기에 결과물 스샷(result_preview.png)이 표시됩니다.")
+            st.info("💡 여기에 결과물 스샷(result_preview.png)이 큼직하게 표시됩니다.")
             
-    st.stop()
+    st.stop() # 랜딩 페이지만 보여주고 아래 코드는 실행 안 함
 
 # ============================================================
-# 👤 4. 사이드바 (사라지지 않고 항상 대기 중!)
+# 👤 5. 유저 사이드바 (정상 작동 보장)
 # ============================================================
 with st.sidebar:
     st.markdown(f"**👤 계정**: {st.session_state['user']['email']}")
@@ -183,10 +178,11 @@ with st.sidebar:
 
     if st.button("로그아웃", use_container_width=True):
         st.session_state["user"] = None
+        st.query_params.clear() # 💡 로그아웃 시 주소창 기록도 삭제
         st.rerun()
 
 # ============================================================
-# 🔥 5. 프롬프트 세팅
+# 🔥 6. 프롬프트 세팅
 # ============================================================
 PROMPT_TEMPLATES = {
     "👨‍🏫 1타 강사 해설 모드": """너는 반도체/EDA 업계를 주름잡는 1타 강사입니다. 
@@ -222,7 +218,7 @@ def build_prompt(text: str, mode: str) -> str:
 {text}"""
 
 # ============================================================
-# ⚙️ 6. 메인 화면: 파일 업로드 및 컨트롤러 (하단 완벽 정렬)
+# ⚙️ 7. 메인 화면: 파일 업로드 및 컨트롤러 (하단 완벽 정렬)
 # ============================================================
 top_left, top_right = st.columns(2, gap="large")
 
@@ -232,8 +228,8 @@ with top_left:
     uploaded_file = st.file_uploader("문서 파일 업로드 (PDF, TXT, DOCX)", type=["pdf", "txt", "docx"])
 
 with top_right:
-    # 💡 [핵심] 제목+캡션 높이를 계산하여 정확히 바닥 라인에 안착시킴 (margin-top: 85px)
-    st.markdown("<div style='margin-top: 85px;'></div>", unsafe_allow_html=True) 
+    # 💡 [핵심 보정] margin-top을 48px로 세밀 조정하여 왼쪽 업로드 박스 밑바닥과 칼같이 맞춤
+    st.markdown("<div style='margin-top: 48px;'></div>", unsafe_allow_html=True) 
     with st.container(border=True):
         st.markdown("### 해석 컨트롤러")
         selected_mode = st.selectbox(
@@ -248,15 +244,13 @@ if uploaded_file is None:
     st.stop()
 
 # ============================================================
-# ⚙️ 7. 파일 파싱 및 텍스트 추출 로직 
+# ⚙️ 8. 파일 파싱 및 하단 뷰어 로직 
 # ============================================================
 file_id = f"{uploaded_file.name}_{uploaded_file.size}"
 file_ext = uploaded_file.name.split('.')[-1].lower()
 
 if st.session_state.get("file_id") != file_id:
-    page_images = []
-    page_texts = []
-    
+    page_images, page_texts = [], []
     with st.spinner("📖 문서 읽는 중..."):
         if file_ext == "pdf":
             pdf_bytes = uploaded_file.read()
@@ -271,20 +265,14 @@ if st.session_state.get("file_id") != file_id:
             raw_text = ""
             if file_ext == "txt":
                 raw_bytes = uploaded_file.read()
-                try:
-                    raw_text = raw_bytes.decode('utf-8')
-                except UnicodeDecodeError:
-                    raw_text = raw_bytes.decode('cp949', errors='ignore')
+                try: raw_text = raw_bytes.decode('utf-8')
+                except: raw_text = raw_bytes.decode('cp949', errors='ignore')
             elif file_ext == "docx":
                 doc_file = docx.Document(io.BytesIO(uploaded_file.read()))
                 raw_text = "\n".join([para.text for para in doc_file.paragraphs])
-            
             chunk_size = 1500
-            if not raw_text.strip():
-                page_texts = ["(내용이 없습니다)"]
-            else:
-                page_texts = [raw_text[i:i+chunk_size] for i in range(0, len(raw_text), chunk_size)]
-            
+            if not raw_text.strip(): page_texts = ["(내용이 없습니다)"]
+            else: page_texts = [raw_text[i:i+chunk_size] for i in range(0, len(raw_text), chunk_size)]
             page_images = [None] * len(page_texts)
 
     st.session_state["file_id"] = file_id
@@ -296,12 +284,9 @@ total_pages = st.session_state["total_pages"]
 page_images = st.session_state["page_images"]
 page_texts = st.session_state["page_texts"]
 
-st.success(f"✅ 총 {total_pages} 페이지(구간) 로드 완료")
+st.success(f"✅ 총 {total_pages} 페이지 로드 완료")
 st.divider()
 
-# ============================================================
-# 🔥 8. 하단 메인 뷰어
-# ============================================================
 col_pdf, col_result = st.columns([1, 1], gap="large")
 
 with col_pdf:
@@ -334,7 +319,7 @@ with col_result:
             else:
                 text = page_texts[view_page - 1].strip()
                 if not text:
-                    st.warning("⚠️ 해당 페이지에 추출 가능한 텍스트가 없습니다.")
+                    st.warning("⚠️ 추출 가능한 텍스트가 없습니다.")
                 else:
                     try:
                         genai.configure(api_key=GEMINI_API_KEY)
@@ -346,7 +331,7 @@ with col_result:
                         if not is_admin and user_info['plan_type'] == 'FREE' and user_info['used_pages'] >= 3:
                             st.error("🚫 무료 제공량(3장)을 모두 소진했습니다.")
                         else:
-                            with st.spinner(f"🧠 [ADMIN] 페이지 {view_page} 분석 중..." if is_admin else f"🧠 페이지 {view_page} 분석 중..."):
+                            with st.spinner(f"🧠 [ADMIN] 분석 중..." if is_admin else f"🧠 분석 중..."):
                                 response = model.generate_content(build_prompt(text, selected_mode))
                             
                             if not is_admin:
