@@ -71,7 +71,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# 💎 2. 요금제 팝업(모달) 창 기능정의
+# 💎 2. 요금제 팝업(모달) 창 기능정의 (높이 대칭 수정 완료)
 # ============================================================
 @st.dialog("💎 플랜 업그레이드 안내")
 def show_pricing_modal():
@@ -79,11 +79,13 @@ def show_pricing_modal():
     col_free, col_pro = st.columns(2)
 
     with col_free:
-        with st.container(border=True):
+        # 👇 여기에 고정 높이(height=420)를 줘서 PRO 칸과 대칭을 맞춥니다.
+        with st.container(height=420, border=True):
             st.subheader("FREE")
             st.markdown("## ₩ 0 / 월")
+            # 텍스트 높이도 통일감을 위해 약간 늘렸습니다.
             st.markdown(
-                """<div style='min-height: 100px; color: #94a3b8;'>
+                """<div style='min-height: 180px; color: #94a3b8;'>
                 ✔️ <b>매월 3장</b> 해석 제공<br>
                 ✔️ 기본 문서 텍스트 추출<br>
                 ✔️ 일반 속도 처리
@@ -96,11 +98,13 @@ def show_pricing_modal():
                 st.button("FREE 플랜", disabled=True, key="modal_free_btn_dis", use_container_width=True)
 
     with col_pro:
-        with st.container(border=True):
+        # 👇 마찬가지로 고정 높이(height=420)를 줘서 완벽한 대칭을 맞춥니다.
+        with st.container(height=420, border=True):
             st.subheader("PRO (인기)")
             st.markdown("## ₩ 9,900 / 월")
+            # 텍스트 높이 통일
             st.markdown(
-                """<div style='min-height: 100px; color: #94a3b8;'>
+                """<div style='min-height: 180px; color: #94a3b8;'>
                 ✔️ <b>월 1,000장 해석 제공</b><br>
                 ✔️ 1타 강사 / 비유 모드 완벽 지원<br>
                 ✔️ 한도 초과 스트레스 없는 쾌적함
@@ -238,18 +242,23 @@ def build_prompt(text: str, mode: str) -> str:
 위 텍스트를 [{mode}] 컨셉에 맞춰 설명해 주세요."""
 
 # ============================================================
-# ⚙️ 6. 상단 파일 로더 및 컨트롤러 조립
+# ⚙️ 6. 상단 파일 로더 및 컨트롤러 조립 (박스 디자인 적용 완료)
 # ============================================================
 top_left, top_right = st.columns(2, gap="large")
+
 with top_right:
-    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
-    st.markdown("### 해석 컨트롤러")
-    selected_mode = st.selectbox(
-        "해석 스타일 선택",
-        list(PROMPT_TEMPLATES.keys()),
-        index=2, # 기본값을 동네 형 모드로 세팅
-    )
-    st.caption("☝️ 원하는 스타일을 선택하고, 아래 원본 뷰어에서 이동한 페이지의 해석 버튼을 눌러주세요.")
+    # 👇 우측 구역 전체를 은은한 곡선 박스로 감쌉니다.
+    with st.container(border=True):
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True) # 위쪽 여백 살짝
+        st.markdown("### 해석 컨트롤러")
+        selected_mode = st.selectbox(
+            "해석 스타일 선택",
+            list(PROMPT_TEMPLATES.keys()),
+            index=2, # 기본값을 동네 형 모드로 세팅
+            label_visibility="collapsed" # selectbox 자체 라벨은 숨겨서 깔끔하게
+        )
+        st.caption("☝️ 원하는 해석 스타일을 선택해 주세요.")
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True) # 아래쪽 여백 살짝
 
 with top_left:
     st.title("📄 쉬운 문서 해석기")
