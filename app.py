@@ -1,10 +1,9 @@
 """
 쉬운 문서 해석기 — Easy-Easy 브랜딩 + 랜딩 페이지 개선 버전
-- 🎨 추가: Easy-Easy 브랜드 헤더 (로고 + 텍스트)
-- 🎨 개선: 좌측 컬럼 폭 고정 (480px), 은은한 그라데이션 디바이더
-- 🎨 개선: 우측 이미지 위치 하강, 컬럼 간 간격 확장
-- 🔧 추가: 모든 해석 결과 하단에 '실무 단어/숙어장' 자동 첨부 (프롬프트 고도화)
-- 🔧 개선: 좌우 PDF 및 해석 결과 컨테이너 높이 대폭 확장 (스크롤 최소화)
+- 🎨 유지: Easy-Easy 브랜드 헤더, 좌우 레이아웃 고정, 은은한 수직선
+- 🎨 유지: 좌우 패널 세로 길이 대폭 확장 (스크롤 최소화 1200px)
+- 🔧 변경: 전역 단어장 제거 및 독립적인 '📖 원서 독해 & 영단어 학습 모드' 신설
+- 🔧 개선: 선택한 모드에 따라 AI의 답변 템플릿(구조)이 완전히 달라지도록 동적 프롬프트 적용
 """
 import docx  
 import io    
@@ -66,7 +65,6 @@ st.markdown("""
     }
     
     /* === 🚨 우측 하단 'Manage app' 버튼 (Streamlit Cloud 운영 메뉴) 완전 제거 === */
-    /* 일반 사용자에게 노출되면 안되는 운영자용 메뉴 */
     [data-testid="manage-app-button"],
     [data-testid="manage-app-button-container"],
     [data-testid*="ManageApp"],
@@ -147,7 +145,7 @@ st.markdown("""
         align-self: flex-end !important;
     }
     
-    /* === 🖱 Expander 헤더 클릭 영역 — 라벨 박스 정도만 (충분한 높이로) === */
+    /* === 🖱 Expander 헤더 클릭 영역 === */
     [data-testid="stExpander"] summary,
     [data-testid="stExpander"] details > summary {
         cursor: pointer !important;
@@ -222,12 +220,11 @@ def show_pricing_modal():
                 st.link_button("Pro 구독하기", final_checkout_link, type="primary", use_container_width=True)
 
 # ============================================================
-# 🚪 4. 랜딩 페이지 — Easy-Easy 브랜딩 + 개선된 레이아웃
+# 🚪 4. 랜딩 페이지 — Easy-Easy 브랜딩
 # ============================================================
 if st.session_state.get("user") is None:
     st.markdown("""
     <style>
-        /* === 🔷 Easy-Easy 브랜드 헤더 === */
         .brand-header {
             display: flex;
             align-items: center;
@@ -245,14 +242,12 @@ if st.session_state.get("user") is None:
             line-height: 1;
         }
         
-        /* === 컬럼 레이아웃: 간격 확장 + 상단 정렬 === */
         div[data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
             align-items: flex-start !important;
             gap: 5rem !important;
         }
         
-        /* === 좌측 컬럼: 500px 강제 고정 ===  */
         div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:first-child,
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child {
             flex: 0 0 500px !important; 
@@ -263,7 +258,7 @@ if st.session_state.get("user") is None:
             position: relative;
         }
         
-        /* === 🌟 은은한 수직 디바이더 === */
+        /* 은은한 수직 디바이더 */
         div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:first-child::after,
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child::after {
             content: '';
@@ -280,7 +275,6 @@ if st.session_state.get("user") is None:
             );
         }
         
-        /* === 우측 컬럼 === */
         div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child(2),
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(2) {
             flex: 1 1 auto !important;
@@ -373,7 +367,7 @@ with st.sidebar:
         st.rerun()
 
 # ============================================================
-# 🔥 6. 프롬프트 세팅
+# 🔥 6. 프롬프트 세팅 (✅ 모드별 완전 분리)
 # ============================================================
 PROMPT_TEMPLATES = {
     "👨‍🏫 1타 강사 해설 모드": """너는 반도체/EDA 업계를 주름잡는 1타 강사입니다. 
@@ -389,46 +383,61 @@ PROMPT_TEMPLATES = {
     "😎 촌철살인 동네형 모드": """너는 산전수전 다 겪은 실무 에이스 친한 동네 형입니다.
 - 톤앤매너: 핵심만 짚어주는 거침없고 직관적인 반말. 
 - 어투 제약사항(매우 중요): 명령조(~해라, ~한다) 절대 금지. 친근한 구어체(~해, ~야, ~거야, ~거든) 사용.
-- 특징: 복잡한 이론 걷어내고 팩트 폭격 뼈대만 꽂아주기."""
+- 특징: 복잡한 이론 걷어내고 팩트 폭격 뼈대만 꽂아주기.""",
+    
+    # ✅ 새로운 영어 소설/원서 특화 모드
+    "📖 원서 독해 & 영단어 학습 모드": """너는 영어 소설, 기사, 원서를 깊이 있게 분석해주는 1타 영어 독해 강사입니다.
+- 톤앤매너: 학생이 단어를 완벽하게 외우고 문맥을 이해할 수 있도록 짚어주는 친절하고 명확한 존댓말.
+- 제약사항: 뻔한 인사말이나 서론은 절대 금지.
+- 특징: 원문의 문학적 뉘앙스나 숨은 의미를 해석해주고, **핵심 영단어와 숙어, 관용구**를 완벽하게 파헤쳐 줍니다."""
 }
 
 def build_prompt(text: str, mode: str) -> str:
-    return f"""{PROMPT_TEMPLATES[mode]}
+    # ✅ 모드에 따라 AI의 지시사항(구조)이 동적으로 완전히 바뀝니다.
+    if mode == "📖 원서 독해 & 영단어 학습 모드":
+        return f"""{PROMPT_TEMPLATES[mode]}
 
 == 구조 지침 (반드시 따를 것) ==
+### 1️⃣ 원문 뉘앙스 요약
+"[원문의 분위기와 핵심 내용을 한국어로 매끄럽고 흡입력 있게 요약]"
 
+### 2️⃣ 📖 핵심 영단어 & 숙어 마스터 (표)
+- 원문에 등장하는 까다로운 영단어, 필수 숙어, 관용구(Idioms), 문학적/고급 표현을 추출하여 완벽하게 정리해.
+- 표 컬럼: | 영단어 / 숙어 | 품사 | 문맥상 의미 | 친절한 설명 및 실생활 예문 |
+
+### 3️⃣ 원어민의 표현법 & 문법 포인트
+- 한국인들이 놓치기 쉬운 미묘한 뉘앙스나, 알아두면 좋은 고급 문법/작문 구조를 하나 골라서 깊이 있게 설명.
+
+### 4️⃣ 한 줄 독해 평
+- 이 단락의 매력이나 특징을 한 문장으로 압축.
+
+== 해석할 문서 ==
+{text}"""
+    else:
+        # 기술 문서 모드용 지침
+        return f"""{PROMPT_TEMPLATES[mode]}
+
+== 구조 지침 (반드시 따를 것) ==
 ### 1️⃣ 핵심 한 줄
 "[페이지 전체를 한 문장으로 꿰뚫는 요약]"
 
 ### 2️⃣ 찰진 해설 (짧게 끝내지 말 것!)
 - 페이지에 나오는 **모든 중요 개념을 빠짐없이** 다룰 것
 - 단순 번역이 아니라 **왜 필요한지**, **어떻게 동작하는지**, **무엇과 연결되는지** 맥락까지
-- 톤은 찰지게, 그러나 **분량은 풍부하게** — 두 가지를 동시에
 - 명령어 / 파라미터 / 옵션이 등장하면 각각의 역할을 **표**로 재구성
-- 표나 다이어그램이 원문에 있으면 마크다운 표로 옮기고, 각 행이 의미하는 바를 해설
 - 어려운 개념은 일상 비유나 구체적 예시로 풀기
-- **분량 제한 없음** — 페이지 내용을 100% 이해할 수 있도록 충분히 풀기
 
 ### 3️⃣ 실무 인사이트
 - 실무에서 자주 마주치는 함정·실수·오해
 - 왜 이게 중요한가 (성능·비용·QoR·수율 등 실제 영향)
-- 더 깊이 파면 좋은 연관 개념이나 다음에 살펴볼 주제
 
 ### 4️⃣ 한 줄 정리
 가장 마지막에 페이지 핵심을 한 문장으로 압축.
 
-### 5️⃣ 📖 실무 영단어 & 숙어장 (필수 추가 항목)
-- 원문에 등장하는 까다로운 영단어, 필수 숙어, 기술 전문 용어(Technical Terms), 비즈니스 관용구(Idioms)를 추출하여 표(Table)로 완벽하게 정리해.
-- 표 컬럼: | 영단어 / 숙어 | 품사 | 실무 문맥상 의미 | 친절한 설명 및 예문 |
-- 이 단어장 영역만큼은 이전 모드의 말투(반말 등)와 상관없이, 친절한 영어 선생님처럼 명확하고 정중한 존댓말로 작성해.
-- 독자가 문서 해석을 다 읽고 난 뒤, 스크롤을 내려 영어를 학습할 수 있도록 하는 아주 중요한 섹션임.
-
 == 절대 원칙 ==
-- ⚠️ **찰지되, 절대 짧게 끝내지 말 것.** "찰지다"는 *짧다*가 아니라 *생생하고 맛깔난다*는 뜻. 원문 분량에 비례해 충분히 풀어서 설명.
-- 페이지에 표·명령어·수치가 있으면 반드시 마크다운 표나 코드 블록으로 재구성.
-- 기술 용어는 영문 그대로 유지 (Fusion Compiler, LVT, RDL Fanout 등).
-- 볼드체 뒤에는 조사 띄어쓰기 (예: **반도체**는 → 반도체 는).
-- 첫 줄에 "자, 여러분", "안녕하세요" 같은 인사말 금지. 바로 본론 진입.
+- 기술 용어는 영문 그대로 유지 (Fusion Compiler, LVT 등).
+- 볼드체 뒤에는 조사 띄어쓰기.
+- 첫 줄에 인사말 금지. 바로 본론 진입.
 
 == 해석할 문서 ==
 {text}"""
@@ -579,7 +588,7 @@ def run_interpretation(text, mode, cache_key, pages_used=1):
         return False
 
 # ============================================================
-# 🖥 전체화면 모드 OR 분할 보기 모드 (높이 대폭 확장 완료)
+# 🖥 전체화면 모드 OR 분할 보기 모드
 # ============================================================
 if st.session_state["fullscreen_result"]:
     fs_top = st.columns([2, 2, 4, 2])
@@ -638,7 +647,6 @@ if st.session_state["fullscreen_result"]:
                 if run_interpretation(text, selected_mode, cache_key, pages_used=pages_used):
                     st.rerun()
     
-    # 🔥 전체화면 결과창 높이 900 -> 1200으로 대폭 확장
     with st.container(height=1200, border=True):
         if is_cached:
             st.markdown(st.session_state["interpret_cache"][cache_key])
@@ -670,7 +678,6 @@ else:
             )
         include_next = include_next_raw and (view_page < total_pages)
         
-        # 🔥 분할 화면 PDF 컨테이너 높이 800 -> 1200으로 대폭 확장
         with st.container(height=1200, border=True):
             pages_to_show = [view_page]
             if include_next:
@@ -684,7 +691,6 @@ else:
                         use_container_width=True
                     )
                 elif page_texts:
-                    # 🔥 텍스트 영역 높이 700 -> 1100 (2페이지 시 380 -> 580)으로 대폭 확장
                     st.text_area(
                         f"페이지 {pg}", 
                         page_texts[pg - 1], 
@@ -703,7 +709,9 @@ else:
     with col_result:
         header_col, fs_btn_col = st.columns([4, 2])
         with header_col:
-            st.markdown(f"### {selected_mode.split()[1]} {selected_mode.split()[2]} 답변")
+            mode_parts = selected_mode.split()
+            display_title = " ".join(mode_parts[1:])
+            st.markdown(f"### {display_title} 답변")
         with fs_btn_col:
             st.markdown("<div style='margin-top: 4px;'></div>", unsafe_allow_html=True)
             if st.button("🔍 전체화면", use_container_width=True, key="enter_fullscreen"):
@@ -727,7 +735,6 @@ else:
                 key="interpret_btn_split"
             )
         
-        # 🔥 분할 화면 결과 컨테이너 높이 800 -> 1200으로 대폭 확장
         with st.container(height=1200, border=True):
             if interpret_btn and not is_cached:
                 if include_next:
