@@ -175,7 +175,7 @@ if st.session_state.get("user") is None:
                 color: #d8b4fe;
                 text-transform: uppercase;
                 letter-spacing: 1px;
-            '>Easy Explain</span>
+            '>이지이지</span>
         </div>
         """, unsafe_allow_html=True)
 
