@@ -63,6 +63,24 @@ st.markdown("""
         display: none !important;
     }
     
+    /* === 🚨 우측 하단 'Manage app' 버튼 (Streamlit Cloud 운영 메뉴) 완전 제거 === */
+    /* 일반 사용자에게 노출되면 안되는 운영자용 메뉴 */
+    [data-testid="manage-app-button"],
+    [data-testid="manage-app-button-container"],
+    [data-testid*="ManageApp"],
+    [data-testid*="manageApp"],
+    [class*="manage-app"],
+    [class*="ManageApp"],
+    .stStatusWidget,
+    [data-testid="stStatusWidget"],
+    [data-testid="stBottomBlockContainer"],
+    iframe[title*="Manage"],
+    iframe[title*="manage"],
+    [aria-label*="Manage app"] {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    
     /* === 🚨 사이드바 무조건 보이게 === */
     [data-testid="stSidebar"] {
         display: block !important;
@@ -127,27 +145,26 @@ st.markdown("""
         align-self: flex-end !important;
     }
     
-    /* === 🖱 Expander 헤더 전체 영역 클릭 가능 + 손가락 커서 === */
+    /* === 🖱 Expander 헤더 클릭 영역 — 라벨 박스 정도만 === */
+    /* width: fit-content로 summary를 라벨 크기에만 맞춤 → 빈 영역은 클릭 X */
     [data-testid="stExpander"] summary,
-    [data-testid="stExpander"] details > summary,
-    [data-testid="stExpanderHeader"],
-    button[data-testid="stExpanderToggleButton"] {
+    [data-testid="stExpander"] details > summary {
         cursor: pointer !important;
-        width: 100% !important;
-        padding: 0.85rem 1rem !important;
+        width: fit-content !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        padding: 0.5rem 0.85rem !important;
+        border-radius: 8px !important;
         transition: background-color 0.15s ease !important;
     }
-    /* 자식 요소(텍스트, 아이콘 등)에도 동일한 커서 적용 */
-    [data-testid="stExpander"] summary *,
-    [data-testid="stExpanderHeader"] *,
-    button[data-testid="stExpanderToggleButton"] * {
+    /* 자식 요소 커서 동기화 */
+    [data-testid="stExpander"] summary * {
         cursor: pointer !important;
     }
     /* 호버 시 살짝 강조 */
-    [data-testid="stExpander"] summary:hover,
-    [data-testid="stExpanderHeader"]:hover,
-    button[data-testid="stExpanderToggleButton"]:hover {
-        background-color: rgba(168, 85, 247, 0.07) !important;
+    [data-testid="stExpander"] summary:hover {
+        background-color: rgba(168, 85, 247, 0.1) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -407,6 +424,8 @@ if "fullscreen_result" not in st.session_state:
     st.session_state["fullscreen_result"] = False
 if "selected_mode" not in st.session_state:
     st.session_state["selected_mode"] = list(PROMPT_TEMPLATES.keys())[2]  # 기본: 동네형
+if "include_next_page" not in st.session_state:
+    st.session_state["include_next_page"] = False
 
 mode_keys = list(PROMPT_TEMPLATES.keys())
 
@@ -516,8 +535,8 @@ file_ext = st.session_state.get("file_ext", "pdf")
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🧠 해석 실행 헬퍼 (분할 보기와 전체화면 공용)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-def run_interpretation(text, mode, cache_key):
-    """해석 실행 + 캐시 저장. 성공시 True"""
+def run_interpretation(text, mode, cache_key, pages_used=1):
+    """해석 실행 + 캐시 저장. 성공시 True. pages_used=2면 사용량 2장 차감"""
     if GEMINI_API_KEY == "":
         st.error("🔑 Secrets 세팅에 GEMINI_API_KEY를 정상 등록해 주세요.")
         return False
@@ -534,15 +553,19 @@ def run_interpretation(text, mode, cache_key):
         current_user = st.session_state.get("user", {})
         is_admin = (current_user.get('plan_type') == 'ADMIN')
         
-        if not is_admin and current_user.get('plan_type') == 'FREE' and current_user.get('used_pages', 0) >= 3:
-            st.error("🚫 무료 제공량(3장)을 모두 소진했습니다.")
-            return False
+        # FREE 플랜 한도 체크 (2페이지 모드는 2장 필요)
+        if not is_admin and current_user.get('plan_type') == 'FREE':
+            current_used = current_user.get('used_pages', 0)
+            if current_used + pages_used > 3:
+                st.error(f"🚫 무료 한도 초과: 현재 {current_used}장 사용 + 이번 {pages_used}장 = 한도 3장 초과")
+                return False
         
-        with st.spinner("🧠 [ADMIN] 분석 중..." if is_admin else "🧠 분석 중..."):
+        spinner_msg = f"🧠 [ADMIN] {pages_used}페이지 분석 중..." if is_admin else f"🧠 {pages_used}페이지 분석 중..."
+        with st.spinner(spinner_msg):
             response = model.generate_content(build_prompt(text, mode))
         
         if not is_admin:
-            new_used = current_user.get('used_pages', 0) + 1
+            new_used = current_user.get('used_pages', 0) + pages_used
             supabase.table("users").update({"used_pages": new_used}).eq("email", current_user.get('email')).execute()
             st.session_state["user"]['used_pages'] = new_used
         
@@ -559,16 +582,26 @@ if st.session_state["fullscreen_result"]:
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # 🔍 전체화면 모드: 해석 결과만 크게
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    fs_top = st.columns([3, 6, 2])
+    fs_top = st.columns([2, 2, 4, 2])
     
     with fs_top[0]:
         view_page = st.number_input(
-            f"📄 페이지 (총 {total_pages})", 
+            f"📄 시작 페이지 (총 {total_pages})", 
             min_value=1, max_value=total_pages, value=1, step=1,
             key="view_page_input"
         )
     
     with fs_top[1]:
+        st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+        include_next_raw_fs = st.checkbox(
+            "📚 다음 페이지 포함",
+            key="include_next_page",
+            disabled=(view_page >= total_pages),
+            help=f"체크 시 {view_page}~{min(view_page+1, total_pages)}페이지 해석"
+        )
+    include_next = include_next_raw_fs and (view_page < total_pages)
+    
+    with fs_top[2]:
         st.markdown(
             f"<div style='margin-top: 32px; color: #94a3b8;'>"
             f"🎭 <b>{selected_mode}</b>"
@@ -576,22 +609,35 @@ if st.session_state["fullscreen_result"]:
             unsafe_allow_html=True
         )
     
-    with fs_top[2]:
+    with fs_top[3]:
         st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
         if st.button("◀ 분할 보기로", use_container_width=True, key="exit_fullscreen"):
             st.session_state["fullscreen_result"] = False
             st.rerun()
     
-    cache_key = f"{file_id}_{view_page}_{selected_mode}"
+    # 캐시 키: 2페이지 여부 포함
+    pages_suffix = "_2pg" if include_next else ""
+    cache_key = f"{file_id}_{view_page}{pages_suffix}_{selected_mode}"
     is_cached = cache_key in st.session_state.get("interpret_cache", {})
     
     # 캐시 없으면 우측 상단에 해석 실행 버튼 노출
     if not is_cached:
+        num_pages_label = 2 if include_next else 1
         run_col = st.columns([8, 2])
         with run_col[1]:
-            if st.button("✨ 이 페이지 해석", type="primary", use_container_width=True, key="run_fs"):
-                text = page_texts[view_page - 1].strip() if page_texts else ""
-                if run_interpretation(text, selected_mode, cache_key):
+            if st.button(f"✨ {num_pages_label}페이지 해석", type="primary", use_container_width=True, key="run_fs"):
+                if include_next:
+                    text = (
+                        page_texts[view_page - 1].strip() 
+                        + "\n\n--- 다음 페이지 ---\n\n" 
+                        + page_texts[view_page].strip()
+                    )
+                    pages_used = 2
+                else:
+                    text = page_texts[view_page - 1].strip() if page_texts else ""
+                    pages_used = 1
+                
+                if run_interpretation(text, selected_mode, cache_key, pages_used=pages_used):
                     st.rerun()
     
     # 결과 풀와이드 표시 (height 900으로 시원하게)
@@ -599,7 +645,8 @@ if st.session_state["fullscreen_result"]:
         if is_cached:
             st.markdown(st.session_state["interpret_cache"][cache_key])
         else:
-            st.info("👆 위의 **[✨ 이 페이지 해석]** 버튼을 눌러주세요.")
+            num_pages_label = 2 if include_next else 1
+            st.info(f"👆 위의 **[✨ {num_pages_label}페이지 해석]** 버튼을 눌러주세요.")
 
 else:
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -610,29 +657,54 @@ else:
     
     with col_pdf:
         st.markdown(f"### {file_ext.upper()} 원본")
-        view_page = st.number_input(
-            "📄 이동할 페이지 번호 입력", 
-            min_value=1, max_value=total_pages, value=1, step=1,
-            key="view_page_input"
-        )
+        
+        # 페이지 번호 + 2페이지 동시 해석 체크박스
+        page_row = st.columns([3, 2])
+        with page_row[0]:
+            view_page = st.number_input(
+                "📄 시작 페이지", 
+                min_value=1, max_value=total_pages, value=1, step=1,
+                key="view_page_input"
+            )
+        with page_row[1]:
+            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+            include_next_raw = st.checkbox(
+                "📚 다음 페이지 포함 (2장 차감)",
+                key="include_next_page",
+                disabled=(view_page >= total_pages),
+                help=f"체크 시 {view_page}~{min(view_page+1, total_pages)}페이지를 함께 해석합니다"
+            )
+        # 마지막 페이지에서 체크해도 무효 처리
+        include_next = include_next_raw and (view_page < total_pages)
         
         with st.container(height=800, border=True):
-            if page_images and page_images[view_page - 1] is not None:
-                st.image(
-                    page_images[view_page - 1], 
-                    caption=f"━━━ 페이지 {view_page} / {total_pages} ━━━", 
-                    use_container_width=True
-                )
-            elif page_texts:
-                st.text_area(
-                    "문서 내용", 
-                    page_texts[view_page - 1], 
-                    height=700, 
-                    disabled=True, 
-                    label_visibility="collapsed"
-                )
+            # 표시할 페이지 목록 결정 (1페이지 또는 2페이지)
+            pages_to_show = [view_page]
+            if include_next:
+                pages_to_show.append(view_page + 1)
+            
+            for idx, pg in enumerate(pages_to_show):
+                if page_images and page_images[pg - 1] is not None:
+                    st.image(
+                        page_images[pg - 1], 
+                        caption=f"━━━ 페이지 {pg} / {total_pages} ━━━", 
+                        use_container_width=True
+                    )
+                elif page_texts:
+                    st.text_area(
+                        f"페이지 {pg}", 
+                        page_texts[pg - 1], 
+                        height=380 if include_next else 700, 
+                        disabled=True, 
+                        label_visibility="visible" if include_next else "collapsed",
+                        key=f"page_text_{pg}_{idx}"
+                    )
+                if idx < len(pages_to_show) - 1:
+                    st.markdown("<hr style='border-color: rgba(168,85,247,0.2);'>", unsafe_allow_html=True)
     
-    cache_key = f"{file_id}_{view_page}_{selected_mode}"
+    # 캐시 키: 2페이지 여부 포함
+    pages_suffix = "_2pg" if include_next else ""
+    cache_key = f"{file_id}_{view_page}{pages_suffix}_{selected_mode}"
     is_cached = cache_key in st.session_state.get("interpret_cache", {})
     
     with col_result:
@@ -656,8 +728,9 @@ else:
             )
         with btn_col:
             st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+            btn_label = f"✨ {len(pages_to_show)}페이지 해석"
             interpret_btn = st.button(
-                "✨ 현재 페이지 해석", 
+                btn_label, 
                 type="primary" if not is_cached else "secondary", 
                 use_container_width=True,
                 key="interpret_btn_split"
@@ -666,11 +739,22 @@ else:
         # 결과 표시
         with st.container(height=800, border=True):
             if interpret_btn and not is_cached:
-                text = page_texts[view_page - 1].strip() if page_texts else ""
-                if run_interpretation(text, selected_mode, cache_key):
+                # 1페이지 or 2페이지 텍스트 조합
+                if include_next:
+                    text = (
+                        page_texts[view_page - 1].strip() 
+                        + "\n\n--- 다음 페이지 ---\n\n" 
+                        + page_texts[view_page].strip()
+                    )
+                    pages_used = 2
+                else:
+                    text = page_texts[view_page - 1].strip() if page_texts else ""
+                    pages_used = 1
+                
+                if run_interpretation(text, selected_mode, cache_key, pages_used=pages_used):
                     st.rerun()
             
             if is_cached:
                 st.markdown(st.session_state["interpret_cache"][cache_key])
             elif not interpret_btn:
-                st.info("👆 상단의 **[✨ 현재 페이지 해석]** 버튼을 눌러주세요.")
+                st.info(f"👆 상단의 **[✨ {len(pages_to_show)}페이지 해석]** 버튼을 눌러주세요.")
