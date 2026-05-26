@@ -155,7 +155,7 @@ st.markdown("""
         align-items: center !important;
         gap: 8px !important;
         padding: 0.6rem 1.1rem !important;
-        min-height: 52px !important;        /* ⬅️ 세로 클릭 영역 확실히 확보 */
+        min-height: 100px !important;        /* ⬅️ 세로 클릭 영역 확실히 확보 */
         border-radius: 8px !important;
         transition: background-color 0.15s ease !important;
     }
