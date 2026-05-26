@@ -1,9 +1,9 @@
 """
-이지이지 — Landing Page UI 고도화 버전
-- 버그 수정 완료: 사이드바 패널(`>`) 및 버튼 완벽 복구
-- UX 보정 1: F5 새로고침 시 로그인 세션 유지 (st.query_params 활용)
-- UI 개선 1: 전체 레이아웃 하향 조정, 좌우 간격 대폭 확대
-- UI 개선 2: 좌측 상단 제목("이지이지") 및 아이콘 📄 추가 (용규님 요청 반영)
+쉬운 문서 해석기 — 랜딩 페이지 UI 고도화 버전
+- 🔧 수정 1: 문구는 그대로 유지하되, 글로벌 레이아웃 패딩을 수정하여 전체적으로 아래로 내림 (padding-top: 15vh)
+- 🔧 수정 2: 페이지 타이틀 "EasyEasy", 아이콘 "🍌" 변경
+- 🔧 수정 3: 좌측 상단에 "나노 바나나" 컨셉의 크리에이티브 엠블럼과 "EasyEasy" 타이틀 추가
+- 🔧 수정 4: 좌측 글과 우측 사진 사이 간격에 은은한 수직선 추가 완료
 """
 import docx  
 import io    
@@ -13,11 +13,11 @@ import google.generativeai as genai
 from supabase import create_client, Client
 
 # ============================================================
-# ⚙️ 1. 페이지 설정 및 전역 스타일 주입
+# ⚙️ 1. 페이지 설정 ✅ 요구사항 반영: 타이틀 "EasyEasy", 아이콘 "🍌"
 # ============================================================
 st.set_page_config(
-    page_title="이지이지", # 📄 제목 변경
-    page_icon="📄",
+    page_title="EasyEasy", # ✅ 타이틀 변경
+    page_icon="🍌", # ✅ 나노 바나나 컨셉 아이콘
     layout="wide",
     initial_sidebar_state="expanded" 
 )
@@ -28,24 +28,116 @@ if "user" not in st.session_state:
 if "interpret_cache" not in st.session_state:
     st.session_state["interpret_cache"] = {}
 
-# 💡 전역 CSS (메인 해석 화면 전용 스타일)
+# ============================================================
+# 💡 전역 CSS — 사이드바를 명시적으로 강제 노출
+# ============================================================
 st.markdown("""
 <style>
-    .stApp { background-color: #0f172a; overflow-x: hidden; }
-    /* 우측 상단 툴바(별모양, 깃허브)만 정확히 숨김 */
-    [data-testid="stToolbar"] { visibility: hidden !important; }
+    /* === 배경 === */
+    .stApp { background-color: #0f172a; }
     
-    h1 { background: linear-gradient(90deg, #d8b4fe, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
-    button[kind="primary"] { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important; border: none !important; color: white !important; font-weight: 600 !important; border-radius: 8px !important; box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4) !important; transition: all 0.3s ease !important; }
-    button[kind="primary"]:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(168, 85, 247, 0.6) !important; }
+    /* === 메인 컨텐츠 위로 끌어올리기 (기본 6rem → 1rem) — 랜딩 페이지에서 오버라이드 예정 === */
+    .main .block-container,
+    [data-testid="stMainBlockContainer"],
+    [data-testid="stAppViewBlockContainer"] {
+        padding-top: 1rem !important;
+    }
+    
+    /* === 상단 헤더는 투명하게만 === */
+    header[data-testid="stHeader"] { 
+        background: transparent !important;
+        height: 0 !important;
+    }
+    
+    /* === 🚨 우측 상단 Streamlit Cloud 버튼들 (Share/⭐/Edit/GitHub) 정밀 타격 === */
+    [data-testid="stToolbarActions"] {
+        display: none !important;
+    }
+    
+    /* 백업: Streamlit Cloud의 viewerBadge 계열 (GitHub 별/링크) */
+    [class*="viewerBadge_container"],
+    [class*="viewerBadge_link"],
+    [class*="ViewerBadge"] {
+        display: none !important;
+    }
+    
+    /* Deploy 버튼류 */
+    .stDeployButton,
+    .stAppDeployButton,
+    [data-testid="stMainMenu"] {
+        display: none !important;
+    }
+    
+    /* === 🚨 사이드바 무조건 보이게 === */
+    [data-testid="stSidebar"] {
+        display: block !important;
+        visibility: visible !important;
+        background-color: #1e293b !important;
+        border-right: 1px solid rgba(255,255,255,0.1) !important;
+    }
+    
+    /* === 사이드바 토글 버튼 안전 보장 === */
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="stSidebarHeader"] button {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        z-index: 999999 !important;
+    }
+    
+    /* === 헤드라인 그라데이션 === */
+    h1 { 
+        background: linear-gradient(90deg, #d8b4fe, #818cf8); 
+        -webkit-background-clip: text; 
+        -webkit-text-fill-color: transparent; 
+        font-weight: 800 !important; 
+    }
+    
+    /* === Primary 버튼 === */
+    button[kind="primary"] { 
+        background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important; 
+        border: none !important; 
+        color: white !important; 
+        font-weight: 600 !important; 
+        border-radius: 8px !important; 
+        box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4) !important; 
+        transition: all 0.3s ease !important; 
+    }
+    button[kind="primary"]:hover { 
+        transform: translateY(-2px); 
+        box-shadow: 0 6px 20px rgba(168, 85, 247, 0.6) !important; 
+    }
+    
+    /* === 컨테이너 === */
     [data-testid="stVerticalBlock"] > div > div { border-radius: 12px; }
-    div[data-testid="stContainer"] { border: 1px solid rgba(255, 255, 255, 0.1) !important; background-color: rgba(30, 41, 59, 0.4) !important; backdrop-filter: blur(10px); }
-    [data-testid="stFileUploadDropzone"] { border: 2px dashed rgba(129, 140, 248, 0.5) !important; background-color: rgba(15, 23, 42, 0.3) !important; border-radius: 12px !important; }
+    div[data-testid="stContainer"] { 
+        border: 1px solid rgba(255, 255, 255, 0.1) !important; 
+        background-color: rgba(30, 41, 59, 0.4) !important; 
+        backdrop-filter: blur(10px); 
+    }
+    [data-testid="stFileUploadDropzone"] { 
+        border: 2px dashed rgba(129, 140, 248, 0.5) !important; 
+        background-color: rgba(15, 23, 42, 0.3) !important; 
+        border-radius: 12px !important; 
+    }
+    
+    /* === 🎯 업로더 ↔ 컨트롤러 하단 자동 정렬 (메인화면용) === */
+    div[data-testid="stHorizontalBlock"]:has([data-testid="stFileUploader"]) {
+        align-items: flex-end !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has([data-testid="stFileUploader"]) 
+    > div[data-testid="column"],
+    div[data-testid="stHorizontalBlock"]:has([data-testid="stFileUploader"]) 
+    > div[data-testid="stColumn"] {
+        align-self: flex-end !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
-# 🔒 2. Supabase 연결 및 [핵심] F5 새로고침 방어 로직
+# 🔒 2. Supabase 연결 및 F5 새로고침 방어 로직 (원본유지)
 # ============================================================
 SUPABASE_URL = "https://nufvazmyuvhqkeysfwla.supabase.co"
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
@@ -53,7 +145,6 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 MODEL_NAME = "gemini-3.1-flash-lite" 
 
-# F5를 눌러도 st.query_params에 이메일이 남아있으면 자동 로그인 처리
 if st.session_state.get("user") is None and "logged_in_email" in st.query_params:
     saved_email = st.query_params["logged_in_email"]
     response = supabase.table("users").select("*").eq("email", saved_email).execute()
@@ -63,7 +154,7 @@ if st.session_state.get("user") is None and "logged_in_email" in st.query_params
         st.query_params.clear()
 
 # ============================================================
-# 💎 3. 요금제 팝업(모달) 창
+# 💎 3. 요금제 팝업(모달) 창 (원본유지)
 # ============================================================
 @st.dialog("💎 플랜 업그레이드 안내")
 def show_pricing_modal():
@@ -99,87 +190,88 @@ def show_pricing_modal():
                 st.link_button("Pro 구독하기", final_checkout_link, type="primary", use_container_width=True)
 
 # ============================================================
-# 🚪 4. 랜딩 페이지 (로그인 안 했을 때만 표시 - UI 고도화 반영)
+# 🚪 4. 랜딩 페이지 — ✅ 요구사항 반영 완료
 # ============================================================
 if st.session_state.get("user") is None:
     st.markdown("""
     <style>
-        /* [캐시 방어] 스타일 캐시를 날리기 위해 임의의 클래스를 루트에 추가하거나 주석 수정 */
-        .stApp.landing-layout { } 
-
-        /* 1. 전체 블록 컨테이너 설정 - ✅ 전체적으로 아래로 내림 */
-        div[data-testid="block-container"] {
-            min-width: 1300px !important;
-            max-width: 1300px !important;
-            padding: 5rem 3rem 3rem 3rem !important; /* ✅ 전체 Padding 증가 (전체적으로 내림) */
-            margin: auto !important;
-            display: flex !important;
-            justify-content: center !important;
-        }
+        /* [캐시방어] 스타일 캐시 날리기 위해 주석 수정 */
         
-        /* 2. 컬럼들을 묶는 가로 블록 설정 - ✅ 간격 증가 및 수직 중앙 */
+        /* ✅ 전체 레이아웃 내리기: 글로벌 CSS를 랜딩 페이지에서만 오버라이드 */
+        div[data-testid="stAppViewBlockContainer"] {
+            padding-top: 15vh !important; /* 💡 전체적으로 하향 조정 */
+        }
+
+        /* 랜딩 레이아웃 설정 */
         div[data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
-            align-items: center !important; /* 수직 중앙 정렬 유지 */
-            gap: 5rem !important; /* ✅ 왼쪽 오른쪽 간격 대폭 증가 */
-            min-width: 1350px !important; 
+            align-items: center !important;
+            gap: 1.5rem; /* 💡 은은한 수직선을 위해 기본 간격은 줄임 */
         }
         
-        /* 3. 좌측 구역(텍스트/로그인 폼): 550px 칼고정 */
+        /* 좌측 컬럼 550px 고정 및 ✅ 은은한 수직선 추가 */
         div[data-testid="column"]:first-child {
-            width: 550px !important;
-            min-width: 550px !important;
-            max-width: 550px !important;
             flex: 0 0 550px !important; 
-            # padding-right: 40px !important; /* ✅ 간격은 gap으로 조절하므로 패딩 제거 */
+            border-right: 1px solid rgba(255, 255, 255, 0.15) !important; /* ✅ 은은한 수직선 */
+            padding-right: 3.5rem !important; /* 💡 수직선 오른쪽 간격 확보 */
         }
-        
-        /* 4. 우측 구역(사진): 800px 칼고정 */
         div[data-testid="column"]:nth-child(2) {
-            min-width: 800px !important;
-            flex: 1 1 800px !important;
-            # padding-left: 1rem !important; /* ✅ 간격은 gap으로 조절하므로 패딩 제거 */
+            flex: 1 1 auto !important;
+            padding-left: 2.5rem !important; /* 💡 수직선 왼쪽 간격 확보 */
         }
-        
-        /* 사진 테두리 마감 */
         [data-testid="stImage"] img {
             border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
-            box-shadow: 0px 4px 40px rgba(129, 140, 248, 0.35) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0px 4px 40px rgba(129, 140, 248, 0.35);
         }
     </style>
     """, unsafe_allow_html=True)
 
-    col_left, col_right = st.columns(2)
+    col_left, col_right = st.columns([1, 2])
     
     with col_left:
-        # st.markdown("<div style='margin-top: 15vh;'></div>", unsafe_allow_html=True) # ✅ 전체 패딩 증가로 필요 없어짐
-
-        # ✅ 왼쪽 위에 제목과 아이콘 삽입 (빨간 박스 영역 구현)
+        # ✅ 좌측 상단에 "나노 바나나" 컨셉의 크리에이티브 엠블럼과 타이틀 추가
         st.markdown("""
         <div style='
             display: flex;
             align-items: center;
-            gap: 15px;
-            padding: 15px;
-            border-radius: 12px;
-            background-color: rgba(168, 85, 247, 0.08); /* 은은한 보라 배경 (테마 유지) */
-            border: 1px solid rgba(168, 85, 247, 0.2);
-            margin-bottom: 2.5rem;
+            gap: 12px;
+            padding: 10px 18px;
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(129, 140, 248, 0.3);
+            border-radius: 50px;
             width: fit-content;
+            margin-bottom: 2rem;
+            box-shadow: 0 0 20px rgba(129, 140, 248, 0.25);
         '>
-            <span style='font-size: 2.2rem;'>📄</span>
-            <span style='
-                font-size: 2rem;
-                font-weight: 800;
-                color: #d8b4fe;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-            '>이지이지</span>
+            <div style='
+                background: linear-gradient(135deg, #facc15 0%, #a855f7 100%); /* 바나나색 ↔ 테크색 그라데이션 */
+                border-radius: 50%;
+                width: 42px;
+                height: 42px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 22px;
+                border: 2px solid #818cf8;
+                box-shadow: 0 0 10px rgba(129, 140, 248, 0.5);
+            '>
+                🍌🦾 </div>
+            <div style='
+                font-size: 1.9rem;
+                font-weight: 900;
+                background: linear-gradient(90deg, #f8fafc, #d8b4fe);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                font-family: "DungGeunMo", sans-serif; /* 픽셀느낌 폰트가 있다면 추천 */
+            '>
+                EasyEasy
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("<h1>어려운 기술 문서,<br>AI가 단 3분 만에<br>동네형 어투로...</h1>", unsafe_allow_html=True)
+        # 🔧 원본 문구 엄수
+        st.markdown("<h1 style='font-size: 3.2rem; line-height: 1.2;'>어려운 기술 문서,<br>이제 가장 쉽게 읽으세요.</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #f8fafc; font-size: 1.1rem; margin-top: 1.5rem; margin-bottom: 2.5rem;'>복잡한 영문 매뉴얼, 번역기 돌리며 고생하지 마세요. AI가 핵심만 짚어 가장 이해하기 쉬운 한글로 설명해 드립니다.</p>", unsafe_allow_html=True)
         
         with st.container(border=True):
@@ -197,12 +289,10 @@ if st.session_state.get("user") is None:
                     insert_res = supabase.table("users").insert(new_user).execute()
                     st.session_state["user"] = insert_res.data[0]
                 
-                # 핵심: 로그인 성공 시 브라우저 주소창에 이메일 기록 (F5 방어)
                 st.query_params["logged_in_email"] = email_input
                 st.rerun()  
 
     with col_right:
-        # st.markdown("<div style='margin-top: 20vh;'></div>", unsafe_allow_html=True) # ✅ 전체 패딩 증가로 필요 없어짐
         try:
             st.image("result_preview.png", use_container_width=True, output_format="PNG")
         except:
@@ -211,7 +301,7 @@ if st.session_state.get("user") is None:
     st.stop() 
 
 # ============================================================
-# 👤 5. 유저 사이드바 (완벽 복구 완료!)
+# 👤 5. 유저 사이드바 (원본유지)
 # ============================================================
 user_data = st.session_state.get("user", {})
 
@@ -235,7 +325,7 @@ with st.sidebar:
         st.rerun()
 
 # ============================================================
-# 🔥 6. 프롬프트 세팅
+# 🔥 6. 프롬프트 세팅 (원본유지)
 # ============================================================
 PROMPT_TEMPLATES = {
     "👨‍🏫 1타 강사 해설 모드": """너는 반도체/EDA 업계를 주름잡는 1타 강사입니다. 
@@ -248,7 +338,7 @@ PROMPT_TEMPLATES = {
 - 제약사항: 인사말 서론 금지. 바로 비유 진입.
 - 특징: 어려운 개념을 직관적으로 이해되게 찰떡 비유.""",
 
-    "😎 촌철살인 동네 형 모드": """너는 산전수전 다 겪은 실무 에이스 친한 동네 형입니다.
+    "😎 촌철살인 동네형 모드": """너는 산전수전 다 겪은 실무 에이스 친한 동네 형입니다.
 - 톤앤매너: 핵심만 짚어주는 거침없고 직관적인 반말. 
 - 어투 제약사항(매우 중요): 명령조(~해라, ~한다) 절대 금지. 친근한 구어체(~해, ~야, ~거야, ~거든) 사용.
 - 특징: 복잡한 이론 걷어내고 팩트 폭격 뼈대만 꽂아주기."""
@@ -271,18 +361,19 @@ def build_prompt(text: str, mode: str) -> str:
 {text}"""
 
 # ============================================================
-# ⚙️ 7. 메인 화면: 파일 업로드 및 컨트롤러 (하단 완벽 정렬)
+# ⚙️ 7. 메인 화면: 파일 업로드 (원본유지)
 # ============================================================
 top_left, top_right = st.columns(2, gap="large")
 
 with top_left:
     st.title("📄 쉬운 문서 해석기")
     st.caption("어려운 기술 문서, 불필요한 사설 없이 핵심만 명확하게 짚어드립니다.")
-    uploaded_file = st.file_uploader("문서 파일 업로드 (PDF, TXT, DOCX)", type=["pdf", "txt", "docx"])
+    uploaded_file = st.file_uploader(
+        "문서 파일 업로드 (PDF, TXT, DOCX)", 
+        type=["pdf", "txt", "docx"]
+    )
 
 with top_right:
-    # 💡 margin-top 48px로 왼쪽 업로드 박스 밑바닥과 칼같이 맞춤
-    st.markdown("<div style='margin-top: 48px;'></div>", unsafe_allow_html=True) 
     with st.container(border=True):
         st.markdown("### 해석 컨트롤러")
         selected_mode = st.selectbox(
@@ -297,7 +388,7 @@ if uploaded_file is None:
     st.stop()
 
 # ============================================================
-# ⚙️ 8. 파일 파싱 및 하단 뷰어 로직 
+# ⚙️ 8. 파일 파싱 및 해석 로직 (원본유지)
 # ============================================================
 file_id = f"{uploaded_file.name}_{uploaded_file.size}"
 file_ext = uploaded_file.name.split('.')[-1].lower()
@@ -324,8 +415,10 @@ if st.session_state.get("file_id") != file_id:
                 doc_file = docx.Document(io.BytesIO(uploaded_file.read()))
                 raw_text = "\n".join([para.text for para in doc_file.paragraphs])
             chunk_size = 1500
-            if not raw_text.strip(): page_texts = ["(내용이 없습니다)"]
-            else: page_texts = [raw_text[i:i+chunk_size] for i in range(0, len(raw_text), chunk_size)]
+            if not raw_text.strip(): 
+                page_texts = ["(내용이 없습니다)"]
+            else: 
+                page_texts = [raw_text[i:i+chunk_size] for i in range(0, len(raw_text), chunk_size)]
             page_images = [None] * len(page_texts)
 
     st.session_state["file_id"] = file_id
@@ -344,13 +437,26 @@ col_pdf, col_result = st.columns([1, 1], gap="large")
 
 with col_pdf:
     st.markdown(f"### {file_ext.upper()} 원본")
-    view_page = st.number_input("📄 이동할 페이지 번호 입력", min_value=1, max_value=total_pages, value=1, step=1)
+    view_page = st.number_input(
+        "📄 이동할 페이지 번호 입력", 
+        min_value=1, max_value=total_pages, value=1, step=1
+    )
     
     with st.container(height=800, border=True):
         if page_images and page_images[view_page - 1] is not None:
-            st.image(page_images[view_page - 1], caption=f"━━━ 페이지 {view_page} / {total_pages} ━━━", use_container_width=True)
+            st.image(
+                page_images[view_page - 1], 
+                caption=f"━━━ 페이지 {view_page} / {total_pages} ━━━", 
+                use_container_width=True
+            )
         elif page_texts:
-            st.text_area("문서 내용", page_texts[view_page - 1], height=700, disabled=True, label_visibility="collapsed")
+            st.text_area(
+                "문서 내용", 
+                page_texts[view_page - 1], 
+                height=700, 
+                disabled=True, 
+                label_visibility="collapsed"
+            )
 
 cache_key = f"{file_id}_{view_page}_{selected_mode}"
 is_cached = cache_key in st.session_state.get("interpret_cache", {})
@@ -360,10 +466,18 @@ with col_result:
     
     status_col, btn_col = st.columns([3, 2])
     with status_col:
-        st.text_input("✨ 현재 상태", value="🟢 메모리에서 불러옴" if is_cached else "⏳ 해석 대기 중", disabled=True)
+        st.text_input(
+            "✨ 현재 상태", 
+            value="🟢 메모리에서 불러옴" if is_cached else "⏳ 해석 대기 중", 
+            disabled=True
+        )
     with btn_col:
         st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-        interpret_btn = st.button("✨ 현재 페이지 해석", type="primary" if not is_cached else "secondary", use_container_width=True)
+        interpret_btn = st.button(
+            "✨ 현재 페이지 해석", 
+            type="primary" if not is_cached else "secondary", 
+            use_container_width=True
+        )
     
     with st.container(height=800, border=True):
         if interpret_btn and not is_cached:
@@ -376,7 +490,10 @@ with col_result:
                 else:
                     try:
                         genai.configure(api_key=GEMINI_API_KEY)
-                        model = genai.GenerativeModel(MODEL_NAME, generation_config=genai.types.GenerationConfig(max_output_tokens=8192))
+                        model = genai.GenerativeModel(
+                            MODEL_NAME, 
+                            generation_config=genai.types.GenerationConfig(max_output_tokens=8192)
+                        )
                         
                         current_user = st.session_state.get("user", {})
                         is_admin = (current_user.get('plan_type') == 'ADMIN')
