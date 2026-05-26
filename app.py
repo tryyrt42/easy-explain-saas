@@ -1,9 +1,9 @@
 """
-쉬운 문서 해석기 — 랜딩 페이지 UI 고도화 버전
-- 🔧 수정 1: 문구는 그대로 유지하되, 글로벌 레이아웃 패딩을 수정하여 전체적으로 아래로 내림 (padding-top: 15vh)
-- 🔧 수정 2: 페이지 타이틀 "EasyEasy", 아이콘 "🍌" 변경
-- 🔧 수정 3: 좌측 상단에 "나노 바나나" 컨셉의 크리에이티브 엠블럼과 "EasyEasy" 타이틀 추가
-- 🔧 수정 4: 좌측 글과 우측 사진 사이 간격에 은은한 수직선 추가 완료
+쉬운 문서 해석기 — 사이드바 복구 버전
+- 🔧 수정 1: 랜딩 페이지의 min-width 1200px 누수로 사이드바가 화면 밖으로 밀려나던 버그 제거
+- 🔧 수정 2: 사이드바 강제 노출 CSS 추가 (구버전/신버전 Streamlit 모두 대응)
+- 🔧 수정 3: 우측 상단 툴바 정밀 제거 (stToolbarActions만 타겟)
+- 🔧 수정 4: 업로더 ↔ 컨트롤러 반응형 하단 정렬 (flex-end)
 """
 import docx  
 import io    
@@ -13,11 +13,11 @@ import google.generativeai as genai
 from supabase import create_client, Client
 
 # ============================================================
-# ⚙️ 1. 페이지 설정 ✅ 요구사항 반영: 타이틀 "EasyEasy", 아이콘 "🍌"
+# ⚙️ 1. 페이지 설정
 # ============================================================
 st.set_page_config(
-    page_title="EasyEasy", # ✅ 타이틀 변경
-    page_icon="🍌", # ✅ 나노 바나나 컨셉 아이콘
+    page_title="쉬운 문서 해석기",
+    page_icon="📄",
     layout="wide",
     initial_sidebar_state="expanded" 
 )
@@ -36,7 +36,7 @@ st.markdown("""
     /* === 배경 === */
     .stApp { background-color: #0f172a; }
     
-    /* === 메인 컨텐츠 위로 끌어올리기 (기본 6rem → 1rem) — 랜딩 페이지에서 오버라이드 예정 === */
+    /* === 🔥 메인 컨텐츠 위로 끌어올리기 (기본 6rem → 1rem) === */
     .main .block-container,
     [data-testid="stMainBlockContainer"],
     [data-testid="stAppViewBlockContainer"] {
@@ -50,6 +50,8 @@ st.markdown("""
     }
     
     /* === 🚨 우측 상단 Streamlit Cloud 버튼들 (Share/⭐/Edit/GitHub) 정밀 타격 === */
+    /* ⚠️ stToolbar 부모는 안 건드림 (사이드바 토글 영향 없음) */
+    /* stToolbarActions만 숨김 — 여기에 Share, Star, Edit, GitHub 다 들어있음 */
     [data-testid="stToolbarActions"] {
         display: none !important;
     }
@@ -68,7 +70,7 @@ st.markdown("""
         display: none !important;
     }
     
-    /* === 🚨 사이드바 무조건 보이게 === */
+    /* === 🚨 사이드바 무조건 보이게 (toolbar 제거해도 사이드바는 살아있음) === */
     [data-testid="stSidebar"] {
         display: block !important;
         visibility: visible !important;
@@ -76,7 +78,7 @@ st.markdown("""
         border-right: 1px solid rgba(255,255,255,0.1) !important;
     }
     
-    /* === 사이드바 토글 버튼 안전 보장 === */
+    /* === 사이드바 토글 버튼은 stToolbar와 별개 셀렉터라 안전 === */
     [data-testid="collapsedControl"],
     [data-testid="stSidebarCollapsedControl"],
     [data-testid="stSidebarCollapseButton"],
@@ -123,10 +125,12 @@ st.markdown("""
         border-radius: 12px !important; 
     }
     
-    /* === 🎯 업로더 ↔ 컨트롤러 하단 자동 정렬 (메인화면용) === */
+    /* === 🎯 업로더 ↔ 컨트롤러 하단 자동 정렬 (반응형 보장) === */
+    /* :has()로 파일 업로더가 포함된 row만 타겟 — PDF/결과 패널에는 영향 없음 */
     div[data-testid="stHorizontalBlock"]:has([data-testid="stFileUploader"]) {
         align-items: flex-end !important;
     }
+    /* 안의 컬럼들이 stretch되지 않고 자기 내용 높이만큼만 차지하도록 */
     div[data-testid="stHorizontalBlock"]:has([data-testid="stFileUploader"]) 
     > div[data-testid="column"],
     div[data-testid="stHorizontalBlock"]:has([data-testid="stFileUploader"]) 
@@ -137,7 +141,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# 🔒 2. Supabase 연결 및 F5 새로고침 방어 로직 (원본유지)
+# 🔒 2. Supabase 연결 및 F5 새로고침 방어 로직
 # ============================================================
 SUPABASE_URL = "https://nufvazmyuvhqkeysfwla.supabase.co"
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
@@ -145,6 +149,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 MODEL_NAME = "gemini-3.1-flash-lite" 
 
+# F5 방어 로직
 if st.session_state.get("user") is None and "logged_in_email" in st.query_params:
     saved_email = st.query_params["logged_in_email"]
     response = supabase.table("users").select("*").eq("email", saved_email).execute()
@@ -154,7 +159,7 @@ if st.session_state.get("user") is None and "logged_in_email" in st.query_params
         st.query_params.clear()
 
 # ============================================================
-# 💎 3. 요금제 팝업(모달) 창 (원본유지)
+# 💎 3. 요금제 팝업(모달) 창
 # ============================================================
 @st.dialog("💎 플랜 업그레이드 안내")
 def show_pricing_modal():
@@ -190,34 +195,25 @@ def show_pricing_modal():
                 st.link_button("Pro 구독하기", final_checkout_link, type="primary", use_container_width=True)
 
 # ============================================================
-# 🚪 4. 랜딩 페이지 — ✅ 요구사항 반영 완료
+# 🚪 4. 랜딩 페이지 — 문제의 min-width 1200px 제거!
 # ============================================================
 if st.session_state.get("user") is None:
     st.markdown("""
     <style>
-        /* [캐시방어] 스타일 캐시 날리기 위해 주석 수정 */
-        
-        /* ✅ 전체 레이아웃 내리기: 글로벌 CSS를 랜딩 페이지에서만 오버라이드 */
-        div[data-testid="stAppViewBlockContainer"] {
-            padding-top: 15vh !important; /* 💡 전체적으로 하향 조정 */
-        }
-
-        /* 랜딩 레이아웃 설정 */
+        /* 🔧 수정: min-width 1200px 제거 (이게 사이드바를 밀어내던 원인!) */
         div[data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
             align-items: center !important;
-            gap: 1.5rem; /* 💡 은은한 수직선을 위해 기본 간격은 줄임 */
         }
-        
-        /* 좌측 컬럼 550px 고정 및 ✅ 은은한 수직선 추가 */
+        /* 좌측 컬럼 550px 고정 */
         div[data-testid="column"]:first-child {
             flex: 0 0 550px !important; 
-            border-right: 1px solid rgba(255, 255, 255, 0.15) !important; /* ✅ 은은한 수직선 */
-            padding-right: 3.5rem !important; /* 💡 수직선 오른쪽 간격 확보 */
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+            padding-right: 3rem !important;
         }
         div[data-testid="column"]:nth-child(2) {
             flex: 1 1 auto !important;
-            padding-left: 2.5rem !important; /* 💡 수직선 왼쪽 간격 확보 */
+            padding-left: 3rem !important;
         }
         [data-testid="stImage"] img {
             border-radius: 12px;
@@ -230,47 +226,6 @@ if st.session_state.get("user") is None:
     col_left, col_right = st.columns([1, 2])
     
     with col_left:
-        # ✅ 좌측 상단에 "나노 바나나" 컨셉의 크리에이티브 엠블럼과 타이틀 추가
-        st.markdown("""
-        <div style='
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 18px;
-            background: rgba(30, 41, 59, 0.6);
-            border: 1px solid rgba(129, 140, 248, 0.3);
-            border-radius: 50px;
-            width: fit-content;
-            margin-bottom: 2rem;
-            box-shadow: 0 0 20px rgba(129, 140, 248, 0.25);
-        '>
-            <div style='
-                background: linear-gradient(135deg, #facc15 0%, #a855f7 100%); /* 바나나색 ↔ 테크색 그라데이션 */
-                border-radius: 50%;
-                width: 42px;
-                height: 42px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 22px;
-                border: 2px solid #818cf8;
-                box-shadow: 0 0 10px rgba(129, 140, 248, 0.5);
-            '>
-                🍌🦾 </div>
-            <div style='
-                font-size: 1.9rem;
-                font-weight: 900;
-                background: linear-gradient(90deg, #f8fafc, #d8b4fe);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                font-family: "DungGeunMo", sans-serif; /* 픽셀느낌 폰트가 있다면 추천 */
-            '>
-                EasyEasy
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # 🔧 원본 문구 엄수
         st.markdown("<h1 style='font-size: 3.2rem; line-height: 1.2;'>어려운 기술 문서,<br>이제 가장 쉽게 읽으세요.</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #f8fafc; font-size: 1.1rem; margin-top: 1.5rem; margin-bottom: 2.5rem;'>복잡한 영문 매뉴얼, 번역기 돌리며 고생하지 마세요. AI가 핵심만 짚어 가장 이해하기 쉬운 한글로 설명해 드립니다.</p>", unsafe_allow_html=True)
         
@@ -301,7 +256,7 @@ if st.session_state.get("user") is None:
     st.stop() 
 
 # ============================================================
-# 👤 5. 유저 사이드바 (원본유지)
+# 👤 5. 유저 사이드바
 # ============================================================
 user_data = st.session_state.get("user", {})
 
@@ -325,7 +280,7 @@ with st.sidebar:
         st.rerun()
 
 # ============================================================
-# 🔥 6. 프롬프트 세팅 (원본유지)
+# 🔥 6. 프롬프트 세팅
 # ============================================================
 PROMPT_TEMPLATES = {
     "👨‍🏫 1타 강사 해설 모드": """너는 반도체/EDA 업계를 주름잡는 1타 강사입니다. 
@@ -361,7 +316,7 @@ def build_prompt(text: str, mode: str) -> str:
 {text}"""
 
 # ============================================================
-# ⚙️ 7. 메인 화면: 파일 업로드 (원본유지)
+# ⚙️ 7. 메인 화면: 파일 업로드
 # ============================================================
 top_left, top_right = st.columns(2, gap="large")
 
@@ -374,6 +329,7 @@ with top_left:
     )
 
 with top_right:
+    # 💡 margin-top 안 씀! 부모 row의 align-items: flex-end가 자동 정렬해줌 (반응형)
     with st.container(border=True):
         st.markdown("### 해석 컨트롤러")
         selected_mode = st.selectbox(
@@ -388,7 +344,7 @@ if uploaded_file is None:
     st.stop()
 
 # ============================================================
-# ⚙️ 8. 파일 파싱 및 해석 로직 (원본유지)
+# ⚙️ 8. 파일 파싱
 # ============================================================
 file_id = f"{uploaded_file.name}_{uploaded_file.size}"
 file_ext = uploaded_file.name.split('.')[-1].lower()
@@ -405,7 +361,9 @@ if st.session_state.get("file_id") != file_id:
                 page_images.append(pix.tobytes("png"))
                 page_texts.append(page.get_text())
             doc.close()
+        
         else:
+            # TXT / DOCX 처리
             raw_text = ""
             if file_ext == "txt":
                 raw_bytes = uploaded_file.read()
