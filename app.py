@@ -3,6 +3,8 @@
 - 🎨 추가: Easy-Easy 브랜드 헤더 (로고 + 텍스트)
 - 🎨 개선: 좌측 컬럼 폭 고정 (480px), 은은한 그라데이션 디바이더
 - 🎨 개선: 우측 이미지 위치 하강, 컬럼 간 간격 확장
+- 🔧 추가: 모든 해석 결과 하단에 '실무 단어/숙어장' 자동 첨부 (프롬프트 고도화)
+- 🔧 개선: 좌우 PDF 및 해석 결과 컨테이너 높이 대폭 확장 (스크롤 최소화)
 """
 import docx  
 import io    
@@ -146,7 +148,6 @@ st.markdown("""
     }
     
     /* === 🖱 Expander 헤더 클릭 영역 — 라벨 박스 정도만 (충분한 높이로) === */
-    /* width: fit-content로 가로폭 제한, min-height로 세로폭 충분히 확보 */
     [data-testid="stExpander"] summary,
     [data-testid="stExpander"] details > summary {
         cursor: pointer !important;
@@ -155,15 +156,13 @@ st.markdown("""
         align-items: center !important;
         gap: 8px !important;
         padding: 0.6rem 1.1rem !important;
-        min-height: 52px !important;        /* ⬅️ 세로 클릭 영역 확실히 확보 */
+        min-height: 52px !important;
         border-radius: 8px !important;
         transition: background-color 0.15s ease !important;
     }
-    /* 자식 요소 커서 동기화 */
     [data-testid="stExpander"] summary * {
         cursor: pointer !important;
     }
-    /* 호버 시 살짝 강조 */
     [data-testid="stExpander"] summary:hover {
         background-color: rgba(168, 85, 247, 0.1) !important;
     }
@@ -226,7 +225,6 @@ def show_pricing_modal():
 # 🚪 4. 랜딩 페이지 — Easy-Easy 브랜딩 + 개선된 레이아웃
 # ============================================================
 if st.session_state.get("user") is None:
-    # 🎨 랜딩 페이지 전용 스타일
     st.markdown("""
     <style>
         /* === 🔷 Easy-Easy 브랜드 헤더 === */
@@ -255,7 +253,6 @@ if st.session_state.get("user") is None:
         }
         
         /* === 좌측 컬럼: 500px 강제 고정 ===  */
-        /* 신/구 Streamlit 모두 대응 (stColumn + column) + 4중 width 안전장치 */
         div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:first-child,
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child {
             flex: 0 0 500px !important; 
@@ -266,7 +263,7 @@ if st.session_state.get("user") is None:
             position: relative;
         }
         
-        /* === 🌟 은은한 수직 디바이더 (제목 위치부터 끝까지 쭉) === */
+        /* === 🌟 은은한 수직 디바이더 === */
         div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:first-child::after,
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child::after {
             content: '';
@@ -283,14 +280,13 @@ if st.session_state.get("user") is None:
             );
         }
         
-        /* === 우측 컬럼: 이미지를 좌측 글자와 같은 높이로 === */
+        /* === 우측 컬럼 === */
         div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child(2),
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(2) {
             flex: 1 1 auto !important;
             width: auto !important;
             min-width: 0 !important;
             padding-left: 3rem !important;
-            /* padding-top 제거! 이미지를 위로 올려 제목과 같은 높이에 맞춤 */
         }
         [data-testid="stImage"] img {
             border-radius: 12px;
@@ -300,8 +296,6 @@ if st.session_state.get("user") is None:
     </style>
     """, unsafe_allow_html=True)
     
-    # 🔷 Easy-Easy 브랜드 헤더 (로고 SVG + 텍스트)
-    # 두 개의 둥근 사각형이 겹친 형태 — "Easy × 2" 이중성 + purple→indigo 그라데이션
     st.markdown("""
     <div class="brand-header">
         <svg width="42" height="42" viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -315,9 +309,7 @@ if st.session_state.get("user") is None:
                     <stop offset="100%" stop-color="#4f46e5"/>
                 </linearGradient>
             </defs>
-            <!-- 뒤쪽 사각형 (반투명) -->
             <rect x="3" y="3" width="22" height="22" rx="7" fill="url(#ee-grad-back)" opacity="0.6"/>
-            <!-- 앞쪽 사각형 (솔리드) -->
             <rect x="17" y="17" width="22" height="22" rx="7" fill="url(#ee-grad-front)"/>
         </svg>
         <span class="brand-name">Easy-Easy</span>
@@ -425,9 +417,14 @@ def build_prompt(text: str, mode: str) -> str:
 ### 4️⃣ 한 줄 정리
 가장 마지막에 페이지 핵심을 한 문장으로 압축.
 
+### 5️⃣ 📖 실무 영단어 & 숙어장 (필수 추가 항목)
+- 원문에 등장하는 까다로운 영단어, 필수 숙어, 기술 전문 용어(Technical Terms), 비즈니스 관용구(Idioms)를 추출하여 표(Table)로 완벽하게 정리해.
+- 표 컬럼: | 영단어 / 숙어 | 품사 | 실무 문맥상 의미 | 친절한 설명 및 예문 |
+- 이 단어장 영역만큼은 이전 모드의 말투(반말 등)와 상관없이, 친절한 영어 선생님처럼 명확하고 정중한 존댓말로 작성해.
+- 독자가 문서 해석을 다 읽고 난 뒤, 스크롤을 내려 영어를 학습할 수 있도록 하는 아주 중요한 섹션임.
+
 == 절대 원칙 ==
 - ⚠️ **찰지되, 절대 짧게 끝내지 말 것.** "찰지다"는 *짧다*가 아니라 *생생하고 맛깔난다*는 뜻. 원문 분량에 비례해 충분히 풀어서 설명.
-  ex) 원문이 빽빽한 한 페이지면 해설도 그만큼 풍부하고 입체적으로.
 - 페이지에 표·명령어·수치가 있으면 반드시 마크다운 표나 코드 블록으로 재구성.
 - 기술 용어는 영문 그대로 유지 (Fusion Compiler, LVT, RDL Fanout 등).
 - 볼드체 뒤에는 조사 띄어쓰기 (예: **반도체**는 → 반도체 는).
@@ -440,24 +437,19 @@ def build_prompt(text: str, mode: str) -> str:
 # ⚙️ 7. 메인 화면 — 접이식 상단 + 전체화면 토글
 # ============================================================
 
-# 상태 초기화
 if "fullscreen_result" not in st.session_state:
     st.session_state["fullscreen_result"] = False
 if "selected_mode" not in st.session_state:
-    st.session_state["selected_mode"] = list(PROMPT_TEMPLATES.keys())[2]  # 기본: 동네형
+    st.session_state["selected_mode"] = list(PROMPT_TEMPLATES.keys())[2]  
 if "include_next_page" not in st.session_state:
     st.session_state["include_next_page"] = False
 
 mode_keys = list(PROMPT_TEMPLATES.keys())
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 📦 상단 섹션: 접이식 expander (클릭으로 접기/펼치기)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 with st.expander("문서 & 해석 설정", expanded=True):
     top_left, top_right = st.columns(2, gap="large")
     
     with top_left:
-        # 🔷 Easy-Easy 엠블럼 + 타이틀 (이모지 제거, 브랜드 일관성)
         st.markdown("""
         <div style='display: flex; align-items: center; gap: 14px; margin: 0.25rem 0 0.5rem 0;'>
             <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -496,7 +488,6 @@ with st.expander("문서 & 해석 설정", expanded=True):
             )
             st.session_state["selected_mode"] = selected_mode
     
-    # 파일 파싱 (expander 안에서 처리 → 결과는 session_state에 저장)
     if uploaded_file is not None:
         file_id = f"{uploaded_file.name}_{uploaded_file.size}"
         file_ext = uploaded_file.name.split('.')[-1].lower()
@@ -540,24 +531,16 @@ with st.expander("문서 & 해석 설정", expanded=True):
     else:
         st.info("👆 좌측에 문서를 업로드하면 툴이 시작됩니다.")
 
-# 파일 없으면 종료
 if uploaded_file is None and "file_id" not in st.session_state:
     st.stop()
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 세션 데이터 로드 (expander 접혀있어도 동작)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 total_pages = st.session_state.get("total_pages", 1)
 page_images = st.session_state.get("page_images", [])
 page_texts = st.session_state.get("page_texts", [])
 file_id = st.session_state.get("file_id", "")
 file_ext = st.session_state.get("file_ext", "pdf")
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 🧠 해석 실행 헬퍼 (분할 보기와 전체화면 공용)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def run_interpretation(text, mode, cache_key, pages_used=1):
-    """해석 실행 + 캐시 저장. 성공시 True. pages_used=2면 사용량 2장 처리"""
     if GEMINI_API_KEY == "":
         st.error("🔑 Secrets 세팅에 GEMINI_API_KEY를 정상 등록해 주세요.")
         return False
@@ -574,7 +557,6 @@ def run_interpretation(text, mode, cache_key, pages_used=1):
         current_user = st.session_state.get("user", {})
         is_admin = (current_user.get('plan_type') == 'ADMIN')
         
-        # FREE 플랜 한도 체크 (2페이지 모드는 2장 필요)
         if not is_admin and current_user.get('plan_type') == 'FREE':
             current_used = current_user.get('used_pages', 0)
             if current_used + pages_used > 3:
@@ -597,12 +579,9 @@ def run_interpretation(text, mode, cache_key, pages_used=1):
         return False
 
 # ============================================================
-# 🖥 전체화면 모드 OR 분할 보기 모드
+# 🖥 전체화면 모드 OR 분할 보기 모드 (높이 대폭 확장 완료)
 # ============================================================
 if st.session_state["fullscreen_result"]:
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 🔍 전체화면 모드: 해석 결과만 크게
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     fs_top = st.columns([2, 2, 4, 2])
     
     with fs_top[0]:
@@ -636,12 +615,10 @@ if st.session_state["fullscreen_result"]:
             st.session_state["fullscreen_result"] = False
             st.rerun()
     
-    # 캐시 키: 2페이지 여부 포함
     pages_suffix = "_2pg" if include_next else ""
     cache_key = f"{file_id}_{view_page}{pages_suffix}_{selected_mode}"
     is_cached = cache_key in st.session_state.get("interpret_cache", {})
     
-    # 캐시 없으면 우측 상단에 해석 실행 버튼 노출
     if not is_cached:
         num_pages_label = 2 if include_next else 1
         run_col = st.columns([8, 2])
@@ -661,8 +638,8 @@ if st.session_state["fullscreen_result"]:
                 if run_interpretation(text, selected_mode, cache_key, pages_used=pages_used):
                     st.rerun()
     
-    # 결과 풀와이드 표시 (height 900으로 시원하게)
-    with st.container(height=900, border=True):
+    # 🔥 전체화면 결과창 높이 900 -> 1200으로 대폭 확장
+    with st.container(height=1200, border=True):
         if is_cached:
             st.markdown(st.session_state["interpret_cache"][cache_key])
         else:
@@ -670,16 +647,12 @@ if st.session_state["fullscreen_result"]:
             st.info(f"👆 위의 **[✨ {num_pages_label}페이지 해석]** 버튼을 눌러주세요.")
 
 else:
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # ↔️ 분할 보기 모드 (원본 + 해석 좌우 분할)
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     st.divider()
     col_pdf, col_result = st.columns([1, 1], gap="large")
     
     with col_pdf:
         st.markdown(f"### {file_ext.upper()} 원본")
         
-        # 페이지 번호 + 2페이지 동시 해석 체크박스
         page_row = st.columns([3, 2])
         with page_row[0]:
             view_page = st.number_input(
@@ -695,11 +668,10 @@ else:
                 disabled=(view_page >= total_pages),
                 help=f"체크 시 {view_page}~{min(view_page+1, total_pages)}페이지를 함께 해석합니다"
             )
-        # 마지막 페이지에서 체크해도 무효 처리
         include_next = include_next_raw and (view_page < total_pages)
         
-        with st.container(height=800, border=True):
-            # 표시할 페이지 목록 결정 (1페이지 또는 2페이지)
+        # 🔥 분할 화면 PDF 컨테이너 높이 800 -> 1200으로 대폭 확장
+        with st.container(height=1200, border=True):
             pages_to_show = [view_page]
             if include_next:
                 pages_to_show.append(view_page + 1)
@@ -712,10 +684,11 @@ else:
                         use_container_width=True
                     )
                 elif page_texts:
+                    # 🔥 텍스트 영역 높이 700 -> 1100 (2페이지 시 380 -> 580)으로 대폭 확장
                     st.text_area(
                         f"페이지 {pg}", 
                         page_texts[pg - 1], 
-                        height=380 if include_next else 700, 
+                        height=580 if include_next else 1100, 
                         disabled=True, 
                         label_visibility="visible" if include_next else "collapsed",
                         key=f"page_text_{pg}_{idx}"
@@ -723,13 +696,11 @@ else:
                 if idx < len(pages_to_show) - 1:
                     st.markdown("<hr style='border-color: rgba(168,85,247,0.2);'>", unsafe_allow_html=True)
     
-    # 캐시 키: 2페이지 여부 포함
     pages_suffix = "_2pg" if include_next else ""
     cache_key = f"{file_id}_{view_page}{pages_suffix}_{selected_mode}"
     is_cached = cache_key in st.session_state.get("interpret_cache", {})
     
     with col_result:
-        # 헤더 + 🔍 전체화면 버튼
         header_col, fs_btn_col = st.columns([4, 2])
         with header_col:
             st.markdown(f"### {selected_mode.split()[1]} {selected_mode.split()[2]} 답변")
@@ -739,7 +710,6 @@ else:
                 st.session_state["fullscreen_result"] = True
                 st.rerun()
         
-        # 상태 + 해석 실행 버튼
         status_col, btn_col = st.columns([3, 2])
         with status_col:
             st.text_input(
@@ -757,10 +727,9 @@ else:
                 key="interpret_btn_split"
             )
         
-        # 결과 표시
-        with st.container(height=800, border=True):
+        # 🔥 분할 화면 결과 컨테이너 높이 800 -> 1200으로 대폭 확장
+        with st.container(height=1200, border=True):
             if interpret_btn and not is_cached:
-                # 1페이지 or 2페이지 텍스트 조합
                 if include_next:
                     text = (
                         page_texts[view_page - 1].strip() 
