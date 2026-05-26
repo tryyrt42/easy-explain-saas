@@ -210,21 +210,24 @@ if st.session_state.get("user") is None:
         div[data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
             align-items: flex-start !important;
-            gap: 4rem !important;
+            gap: 5rem !important;
         }
         
-        /* === 좌측 컬럼: 480px 고정 (반응형 깨짐 방지) === */
-        div[data-testid="column"]:first-child {
-            flex: 0 0 480px !important; 
-            min-width: 480px !important;
-            max-width: 480px !important;
-            padding-right: 2.5rem !important;
+        /* === 좌측 컬럼: 500px 강제 고정 ===  */
+        /* 신/구 Streamlit 모두 대응 (stColumn + column) + 4중 width 안전장치 */
+        div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:first-child,
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child {
+            flex: 0 0 500px !important; 
+            width: 500px !important;
+            min-width: 500px !important;
+            max-width: 500px !important;
+            padding-right: 3rem !important;
             position: relative;
         }
         
         /* === 🌟 은은한 그라데이션 수직 디바이더 === */
-        /* 위/아래로 페이드아웃되어 자연스럽게 보임 */
-        div[data-testid="column"]:first-child::after {
+        div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:first-child::after,
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child::after {
             content: '';
             position: absolute;
             top: 8%;
@@ -233,16 +236,19 @@ if st.session_state.get("user") is None:
             width: 1px;
             background: linear-gradient(180deg, 
                 transparent 0%, 
-                rgba(168, 85, 247, 0.28) 30%, 
-                rgba(168, 85, 247, 0.28) 70%, 
+                rgba(168, 85, 247, 0.3) 30%, 
+                rgba(168, 85, 247, 0.3) 70%, 
                 transparent 100%
             );
         }
         
-        /* === 우측 컬럼: 이미지 아래로 내림 === */
-        div[data-testid="column"]:nth-child(2) {
+        /* === 우측 컬럼: 나머지 영역 차지 + 이미지 하강 === */
+        div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child(2),
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(2) {
             flex: 1 1 auto !important;
-            padding-left: 2.5rem !important;
+            width: auto !important;
+            min-width: 0 !important;
+            padding-left: 3rem !important;
             padding-top: 5rem !important;
         }
         [data-testid="stImage"] img {
