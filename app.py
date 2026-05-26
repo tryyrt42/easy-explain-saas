@@ -225,31 +225,31 @@ if st.session_state.get("user") is None:
             position: relative;
         }
         
-        /* === 🌟 은은한 그라데이션 수직 디바이더 === */
+        /* === 🌟 은은한 수직 디바이더 (제목 위치부터 끝까지 쭉) === */
         div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:first-child::after,
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child::after {
             content: '';
             position: absolute;
-            top: 8%;
-            bottom: 8%;
+            top: 0;
+            bottom: 0;
             right: 0;
             width: 1px;
             background: linear-gradient(180deg, 
                 transparent 0%, 
-                rgba(168, 85, 247, 0.3) 30%, 
-                rgba(168, 85, 247, 0.3) 70%, 
+                rgba(168, 85, 247, 0.3) 4%, 
+                rgba(168, 85, 247, 0.3) 96%, 
                 transparent 100%
             );
         }
         
-        /* === 우측 컬럼: 나머지 영역 차지 + 이미지 하강 === */
+        /* === 우측 컬럼: 이미지를 좌측 글자와 같은 높이로 === */
         div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child(2),
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(2) {
             flex: 1 1 auto !important;
             width: auto !important;
             min-width: 0 !important;
             padding-left: 3rem !important;
-            padding-top: 5rem !important;
+            /* padding-top 제거! 이미지를 위로 올려 제목과 같은 높이에 맞춤 */
         }
         [data-testid="stImage"] img {
             border-radius: 12px;
