@@ -145,8 +145,8 @@ st.markdown("""
         align-self: flex-end !important;
     }
     
-    /* === 🖱 Expander 헤더 클릭 영역 — 라벨 박스 정도만 === */
-    /* width: fit-content로 summary를 라벨 크기에만 맞춤 → 빈 영역은 클릭 X */
+    /* === 🖱 Expander 헤더 클릭 영역 — 라벨 박스 정도만 (충분한 높이로) === */
+    /* width: fit-content로 가로폭 제한, min-height로 세로폭 충분히 확보 */
     [data-testid="stExpander"] summary,
     [data-testid="stExpander"] details > summary {
         cursor: pointer !important;
@@ -154,7 +154,8 @@ st.markdown("""
         display: inline-flex !important;
         align-items: center !important;
         gap: 8px !important;
-        padding: 0.5rem 0.85rem !important;
+        padding: 0.6rem 1.1rem !important;
+        min-height: 52px !important;        /* ⬅️ 세로 클릭 영역 확실히 확보 */
         border-radius: 8px !important;
         transition: background-color 0.15s ease !important;
     }
@@ -402,15 +403,35 @@ PROMPT_TEMPLATES = {
 def build_prompt(text: str, mode: str) -> str:
     return f"""{PROMPT_TEMPLATES[mode]}
 
-== 구조 지침 ==
-1. 핵심 타격: "> [가장 뼈때리는 한 줄 요약]" 
-2. 찰진 해설: 명령어, 파라미터 컨셉에 맞게.
-3. 실무 한 줄 팁: 실무자 조언으로 마무리.
+== 구조 지침 (반드시 따를 것) ==
 
-== 규칙 ==
-- 기술 용어 영문 유지
-- 마크다운 표 활용
-- 볼드체 뒤에 조사 띄어쓰기
+### 1️⃣ 핵심 한 줄
+"> [페이지 전체를 한 문장으로 꿰뚫는 요약]"
+
+### 2️⃣ 찰진 해설 (짧게 끝내지 말 것!)
+- 페이지에 나오는 **모든 중요 개념을 빠짐없이** 다룰 것
+- 단순 번역이 아니라 **왜 필요한지**, **어떻게 동작하는지**, **무엇과 연결되는지** 맥락까지
+- 톤은 찰지게, 그러나 **분량은 풍부하게** — 두 가지를 동시에
+- 명령어 / 파라미터 / 옵션이 등장하면 각각의 역할을 **표**로 재구성
+- 표나 다이어그램이 원문에 있으면 마크다운 표로 옮기고, 각 행이 의미하는 바를 해설
+- 어려운 개념은 일상 비유나 구체적 예시로 풀기
+- **분량 제한 없음** — 페이지 내용을 100% 이해할 수 있도록 충분히 풀기
+
+### 3️⃣ 실무 인사이트
+- 실무에서 자주 마주치는 함정·실수·오해
+- 왜 이게 중요한가 (성능·비용·QoR·수율 등 실제 영향)
+- 더 깊이 파면 좋은 연관 개념이나 다음에 살펴볼 주제
+
+### 4️⃣ 한 줄 정리
+가장 마지막에 페이지 핵심을 한 문장으로 압축.
+
+== 절대 원칙 ==
+- ⚠️ **찰지되, 절대 짧게 끝내지 말 것.** "찰지다"는 *짧다*가 아니라 *생생하고 맛깔난다*는 뜻. 원문 분량에 비례해 충분히 풀어서 설명.
+  ex) 원문이 빽빽한 한 페이지면 해설도 그만큼 풍부하고 입체적으로.
+- 페이지에 표·명령어·수치가 있으면 반드시 마크다운 표나 코드 블록으로 재구성.
+- 기술 용어는 영문 그대로 유지 (Fusion Compiler, LVT, RDL Fanout 등).
+- 볼드체 뒤에는 조사 띄어쓰기 (예: **반도체**는 → 반도체 는).
+- 첫 줄에 "자, 여러분", "안녕하세요" 같은 인사말 금지. 바로 본론 진입.
 
 == 해석할 문서 ==
 {text}"""
@@ -536,7 +557,7 @@ file_ext = st.session_state.get("file_ext", "pdf")
 # 🧠 해석 실행 헬퍼 (분할 보기와 전체화면 공용)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def run_interpretation(text, mode, cache_key, pages_used=1):
-    """해석 실행 + 캐시 저장. 성공시 True. pages_used=2면 사용량 2장 차감"""
+    """해석 실행 + 캐시 저장. 성공시 True. pages_used=2면 사용량 2장 처리"""
     if GEMINI_API_KEY == "":
         st.error("🔑 Secrets 세팅에 GEMINI_API_KEY를 정상 등록해 주세요.")
         return False
@@ -669,7 +690,7 @@ else:
         with page_row[1]:
             st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
             include_next_raw = st.checkbox(
-                "📚 다음 페이지 포함 (2장 차감)",
+                "📚 다음 페이지 포함",
                 key="include_next_page",
                 disabled=(view_page >= total_pages),
                 help=f"체크 시 {view_page}~{min(view_page+1, total_pages)}페이지를 함께 해석합니다"
