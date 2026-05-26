@@ -376,160 +376,259 @@ def build_prompt(text: str, mode: str) -> str:
 {text}"""
 
 # ============================================================
-# ⚙️ 7. 메인 화면: 파일 업로드
+# ⚙️ 7. 메인 화면 — 접이식 상단 + 전체화면 토글
 # ============================================================
-top_left, top_right = st.columns(2, gap="large")
 
-with top_left:
-    st.title("📄 쉬운 문서 해석기")
-    st.caption("어려운 기술 문서, 불필요한 사설 없이 핵심만 명확하게 짚어드립니다.")
-    uploaded_file = st.file_uploader(
-        "문서 파일 업로드 (PDF, TXT, DOCX)", 
-        type=["pdf", "txt", "docx"]
-    )
+# 상태 초기화
+if "fullscreen_result" not in st.session_state:
+    st.session_state["fullscreen_result"] = False
+if "selected_mode" not in st.session_state:
+    st.session_state["selected_mode"] = list(PROMPT_TEMPLATES.keys())[2]  # 기본: 동네형
 
-with top_right:
-    with st.container(border=True):
-        st.markdown("### 해석 컨트롤러")
-        selected_mode = st.selectbox(
-            "해석 스타일 선택",
-            list(PROMPT_TEMPLATES.keys()),
-            index=2, 
-            label_visibility="collapsed" 
+mode_keys = list(PROMPT_TEMPLATES.keys())
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 📦 상단 섹션: 접이식 expander (클릭으로 접기/펼치기)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+with st.expander("📄 문서 & 해석 설정 (클릭하여 접기/펼치기)", expanded=True):
+    top_left, top_right = st.columns(2, gap="large")
+    
+    with top_left:
+        st.title("📄 쉬운 문서 해석기")
+        st.caption("어려운 기술 문서, 불필요한 사설 없이 핵심만 명확하게 짚어드립니다.")
+        uploaded_file = st.file_uploader(
+            "문서 파일 업로드 (PDF, TXT, DOCX)", 
+            type=["pdf", "txt", "docx"],
+            key="file_uploader_main"
         )
+    
+    with top_right:
+        with st.container(border=True):
+            st.markdown("### 해석 컨트롤러")
+            selected_mode = st.selectbox(
+                "해석 스타일 선택",
+                mode_keys,
+                index=mode_keys.index(st.session_state["selected_mode"]),
+                label_visibility="collapsed",
+                key="mode_selector_main"
+            )
+            st.session_state["selected_mode"] = selected_mode
+    
+    # 파일 파싱 (expander 안에서 처리 → 결과는 session_state에 저장)
+    if uploaded_file is not None:
+        file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+        file_ext = uploaded_file.name.split('.')[-1].lower()
+        
+        if st.session_state.get("file_id") != file_id:
+            page_images, page_texts = [], []
+            with st.spinner("📖 문서 읽는 중..."):
+                if file_ext == "pdf":
+                    pdf_bytes = uploaded_file.read()
+                    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+                    for i in range(len(doc)):
+                        page = doc[i]
+                        pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
+                        page_images.append(pix.tobytes("png"))
+                        page_texts.append(page.get_text())
+                    doc.close()
+                else:
+                    raw_text = ""
+                    if file_ext == "txt":
+                        raw_bytes = uploaded_file.read()
+                        try: raw_text = raw_bytes.decode('utf-8')
+                        except: raw_text = raw_bytes.decode('cp949', errors='ignore')
+                    elif file_ext == "docx":
+                        doc_file = docx.Document(io.BytesIO(uploaded_file.read()))
+                        raw_text = "\n".join([para.text for para in doc_file.paragraphs])
+                    chunk_size = 1500
+                    if not raw_text.strip(): 
+                        page_texts = ["(내용이 없습니다)"]
+                    else: 
+                        page_texts = [raw_text[i:i+chunk_size] for i in range(0, len(raw_text), chunk_size)]
+                    page_images = [None] * len(page_texts)
+            
+            st.session_state["file_id"] = file_id
+            st.session_state["file_ext"] = file_ext
+            st.session_state["page_images"] = page_images
+            st.session_state["page_texts"] = page_texts
+            st.session_state["total_pages"] = len(page_texts)
+        
+        total_pages_show = st.session_state.get("total_pages", 1)
+        st.success(f"✅ 총 {total_pages_show} 페이지 로드 완료")
+    else:
+        st.info("👆 좌측에 문서를 업로드하면 툴이 시작됩니다.")
 
-if uploaded_file is None:
-    st.info("👆 좌측에 문서를 업로드하면 툴이 시작됩니다.")
+# 파일 없으면 종료
+if uploaded_file is None and "file_id" not in st.session_state:
     st.stop()
 
-# ============================================================
-# ⚙️ 8. 파일 파싱
-# ============================================================
-file_id = f"{uploaded_file.name}_{uploaded_file.size}"
-file_ext = uploaded_file.name.split('.')[-1].lower()
-
-if st.session_state.get("file_id") != file_id:
-    page_images, page_texts = [], []
-    with st.spinner("📖 문서 읽는 중..."):
-        if file_ext == "pdf":
-            pdf_bytes = uploaded_file.read()
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-            for i in range(len(doc)):
-                page = doc[i]
-                pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
-                page_images.append(pix.tobytes("png"))
-                page_texts.append(page.get_text())
-            doc.close()
-        else:
-            raw_text = ""
-            if file_ext == "txt":
-                raw_bytes = uploaded_file.read()
-                try: raw_text = raw_bytes.decode('utf-8')
-                except: raw_text = raw_bytes.decode('cp949', errors='ignore')
-            elif file_ext == "docx":
-                doc_file = docx.Document(io.BytesIO(uploaded_file.read()))
-                raw_text = "\n".join([para.text for para in doc_file.paragraphs])
-            chunk_size = 1500
-            if not raw_text.strip(): 
-                page_texts = ["(내용이 없습니다)"]
-            else: 
-                page_texts = [raw_text[i:i+chunk_size] for i in range(0, len(raw_text), chunk_size)]
-            page_images = [None] * len(page_texts)
-
-    st.session_state["file_id"] = file_id
-    st.session_state["page_images"] = page_images
-    st.session_state["page_texts"] = page_texts
-    st.session_state["total_pages"] = len(page_texts)
-
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 세션 데이터 로드 (expander 접혀있어도 동작)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 total_pages = st.session_state.get("total_pages", 1)
 page_images = st.session_state.get("page_images", [])
 page_texts = st.session_state.get("page_texts", [])
+file_id = st.session_state.get("file_id", "")
+file_ext = st.session_state.get("file_ext", "pdf")
 
-st.success(f"✅ 총 {total_pages} 페이지 로드 완료")
-st.divider()
-
-col_pdf, col_result = st.columns([1, 1], gap="large")
-
-with col_pdf:
-    st.markdown(f"### {file_ext.upper()} 원본")
-    view_page = st.number_input(
-        "📄 이동할 페이지 번호 입력", 
-        min_value=1, max_value=total_pages, value=1, step=1
-    )
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 🧠 해석 실행 헬퍼 (분할 보기와 전체화면 공용)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+def run_interpretation(text, mode, cache_key):
+    """해석 실행 + 캐시 저장. 성공시 True"""
+    if GEMINI_API_KEY == "":
+        st.error("🔑 Secrets 세팅에 GEMINI_API_KEY를 정상 등록해 주세요.")
+        return False
+    if not text:
+        st.warning("⚠️ 추출 가능한 텍스트가 없습니다.")
+        return False
     
-    with st.container(height=800, border=True):
-        if page_images and page_images[view_page - 1] is not None:
-            st.image(
-                page_images[view_page - 1], 
-                caption=f"━━━ 페이지 {view_page} / {total_pages} ━━━", 
-                use_container_width=True
-            )
-        elif page_texts:
-            st.text_area(
-                "문서 내용", 
-                page_texts[view_page - 1], 
-                height=700, 
-                disabled=True, 
-                label_visibility="collapsed"
-            )
-
-cache_key = f"{file_id}_{view_page}_{selected_mode}"
-is_cached = cache_key in st.session_state.get("interpret_cache", {})
-
-with col_result:
-    st.markdown(f"### {selected_mode.split()[1]} {selected_mode.split()[2]} 답변")
-    
-    status_col, btn_col = st.columns([3, 2])
-    with status_col:
-        st.text_input(
-            "✨ 현재 상태", 
-            value="🟢 메모리에서 불러옴" if is_cached else "⏳ 해석 대기 중", 
-            disabled=True
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel(
+            MODEL_NAME, 
+            generation_config=genai.types.GenerationConfig(max_output_tokens=8192)
         )
-    with btn_col:
+        current_user = st.session_state.get("user", {})
+        is_admin = (current_user.get('plan_type') == 'ADMIN')
+        
+        if not is_admin and current_user.get('plan_type') == 'FREE' and current_user.get('used_pages', 0) >= 3:
+            st.error("🚫 무료 제공량(3장)을 모두 소진했습니다.")
+            return False
+        
+        with st.spinner("🧠 [ADMIN] 분석 중..." if is_admin else "🧠 분석 중..."):
+            response = model.generate_content(build_prompt(text, mode))
+        
+        if not is_admin:
+            new_used = current_user.get('used_pages', 0) + 1
+            supabase.table("users").update({"used_pages": new_used}).eq("email", current_user.get('email')).execute()
+            st.session_state["user"]['used_pages'] = new_used
+        
+        st.session_state["interpret_cache"][cache_key] = response.text
+        return True
+    except Exception as e:
+        st.error(f"❌ 오류: {e}")
+        return False
+
+# ============================================================
+# 🖥 전체화면 모드 OR 분할 보기 모드
+# ============================================================
+if st.session_state["fullscreen_result"]:
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 🔍 전체화면 모드: 해석 결과만 크게
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    fs_top = st.columns([3, 6, 2])
+    
+    with fs_top[0]:
+        view_page = st.number_input(
+            f"📄 페이지 (총 {total_pages})", 
+            min_value=1, max_value=total_pages, value=1, step=1,
+            key="view_page_input"
+        )
+    
+    with fs_top[1]:
+        st.markdown(
+            f"<div style='margin-top: 32px; color: #94a3b8;'>"
+            f"🎭 <b>{selected_mode}</b>"
+            f"</div>", 
+            unsafe_allow_html=True
+        )
+    
+    with fs_top[2]:
         st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-        interpret_btn = st.button(
-            "✨ 현재 페이지 해석", 
-            type="primary" if not is_cached else "secondary", 
-            use_container_width=True
-        )
+        if st.button("◀ 분할 보기로", use_container_width=True, key="exit_fullscreen"):
+            st.session_state["fullscreen_result"] = False
+            st.rerun()
     
-    with st.container(height=800, border=True):
-        if interpret_btn and not is_cached:
-            if GEMINI_API_KEY == "":
-                st.error("🔑 Secrets 세팅에 GEMINI_API_KEY를 정상 등록해 주세요.")
-            else:
+    cache_key = f"{file_id}_{view_page}_{selected_mode}"
+    is_cached = cache_key in st.session_state.get("interpret_cache", {})
+    
+    # 캐시 없으면 우측 상단에 해석 실행 버튼 노출
+    if not is_cached:
+        run_col = st.columns([8, 2])
+        with run_col[1]:
+            if st.button("✨ 이 페이지 해석", type="primary", use_container_width=True, key="run_fs"):
                 text = page_texts[view_page - 1].strip() if page_texts else ""
-                if not text:
-                    st.warning("⚠️ 추출 가능한 텍스트가 없습니다.")
-                else:
-                    try:
-                        genai.configure(api_key=GEMINI_API_KEY)
-                        model = genai.GenerativeModel(
-                            MODEL_NAME, 
-                            generation_config=genai.types.GenerationConfig(max_output_tokens=8192)
-                        )
-                        
-                        current_user = st.session_state.get("user", {})
-                        is_admin = (current_user.get('plan_type') == 'ADMIN')
-                        
-                        if not is_admin and current_user.get('plan_type') == 'FREE' and current_user.get('used_pages', 0) >= 3:
-                            st.error("🚫 무료 제공량(3장)을 모두 소진했습니다.")
-                        else:
-                            with st.spinner(f"🧠 [ADMIN] 분석 중..." if is_admin else f"🧠 분석 중..."):
-                                response = model.generate_content(build_prompt(text, selected_mode))
-                            
-                            if not is_admin:
-                                new_used = current_user.get('used_pages', 0) + 1
-                                supabase.table("users").update({"used_pages": new_used}).eq("email", current_user.get('email')).execute()
-                                st.session_state["user"]['used_pages'] = new_used
-                            
-                            st.session_state["interpret_cache"][cache_key] = response.text
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ 오류: {e}")
-
+                if run_interpretation(text, selected_mode, cache_key):
+                    st.rerun()
+    
+    # 결과 풀와이드 표시 (height 900으로 시원하게)
+    with st.container(height=900, border=True):
         if is_cached:
             st.markdown(st.session_state["interpret_cache"][cache_key])
-        elif not interpret_btn:
-            st.info("👆 상단의 **[✨ 현재 페이지 해석]** 버튼을 눌러주세요.")
+        else:
+            st.info("👆 위의 **[✨ 이 페이지 해석]** 버튼을 눌러주세요.")
+
+else:
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # ↔️ 분할 보기 모드 (원본 + 해석 좌우 분할)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    st.divider()
+    col_pdf, col_result = st.columns([1, 1], gap="large")
+    
+    with col_pdf:
+        st.markdown(f"### {file_ext.upper()} 원본")
+        view_page = st.number_input(
+            "📄 이동할 페이지 번호 입력", 
+            min_value=1, max_value=total_pages, value=1, step=1,
+            key="view_page_input"
+        )
+        
+        with st.container(height=800, border=True):
+            if page_images and page_images[view_page - 1] is not None:
+                st.image(
+                    page_images[view_page - 1], 
+                    caption=f"━━━ 페이지 {view_page} / {total_pages} ━━━", 
+                    use_container_width=True
+                )
+            elif page_texts:
+                st.text_area(
+                    "문서 내용", 
+                    page_texts[view_page - 1], 
+                    height=700, 
+                    disabled=True, 
+                    label_visibility="collapsed"
+                )
+    
+    cache_key = f"{file_id}_{view_page}_{selected_mode}"
+    is_cached = cache_key in st.session_state.get("interpret_cache", {})
+    
+    with col_result:
+        # 헤더 + 🔍 전체화면 버튼
+        header_col, fs_btn_col = st.columns([4, 2])
+        with header_col:
+            st.markdown(f"### {selected_mode.split()[1]} {selected_mode.split()[2]} 답변")
+        with fs_btn_col:
+            st.markdown("<div style='margin-top: 4px;'></div>", unsafe_allow_html=True)
+            if st.button("🔍 전체화면", use_container_width=True, key="enter_fullscreen"):
+                st.session_state["fullscreen_result"] = True
+                st.rerun()
+        
+        # 상태 + 해석 실행 버튼
+        status_col, btn_col = st.columns([3, 2])
+        with status_col:
+            st.text_input(
+                "✨ 현재 상태", 
+                value="🟢 메모리에서 불러옴" if is_cached else "⏳ 해석 대기 중", 
+                disabled=True
+            )
+        with btn_col:
+            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+            interpret_btn = st.button(
+                "✨ 현재 페이지 해석", 
+                type="primary" if not is_cached else "secondary", 
+                use_container_width=True,
+                key="interpret_btn_split"
+            )
+        
+        # 결과 표시
+        with st.container(height=800, border=True):
+            if interpret_btn and not is_cached:
+                text = page_texts[view_page - 1].strip() if page_texts else ""
+                if run_interpretation(text, selected_mode, cache_key):
+                    st.rerun()
+            
+            if is_cached:
+                st.markdown(st.session_state["interpret_cache"][cache_key])
+            elif not interpret_btn:
+                st.info("👆 상단의 **[✨ 현재 페이지 해석]** 버튼을 눌러주세요.")
