@@ -126,6 +126,29 @@ st.markdown("""
     > div[data-testid="stColumn"] {
         align-self: flex-end !important;
     }
+    
+    /* === 🖱 Expander 헤더 전체 영역 클릭 가능 + 손가락 커서 === */
+    [data-testid="stExpander"] summary,
+    [data-testid="stExpander"] details > summary,
+    [data-testid="stExpanderHeader"],
+    button[data-testid="stExpanderToggleButton"] {
+        cursor: pointer !important;
+        width: 100% !important;
+        padding: 0.85rem 1rem !important;
+        transition: background-color 0.15s ease !important;
+    }
+    /* 자식 요소(텍스트, 아이콘 등)에도 동일한 커서 적용 */
+    [data-testid="stExpander"] summary *,
+    [data-testid="stExpanderHeader"] *,
+    button[data-testid="stExpanderToggleButton"] * {
+        cursor: pointer !important;
+    }
+    /* 호버 시 살짝 강조 */
+    [data-testid="stExpander"] summary:hover,
+    [data-testid="stExpanderHeader"]:hover,
+    button[data-testid="stExpanderToggleButton"]:hover {
+        background-color: rgba(168, 85, 247, 0.07) !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -390,11 +413,30 @@ mode_keys = list(PROMPT_TEMPLATES.keys())
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 📦 상단 섹션: 접이식 expander (클릭으로 접기/펼치기)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-with st.expander("📄 문서 & 해석 설정 (클릭하여 접기/펼치기)", expanded=True):
+with st.expander("문서 & 해석 설정", expanded=True):
     top_left, top_right = st.columns(2, gap="large")
     
     with top_left:
-        st.title("📄 쉬운 문서 해석기")
+        # 🔷 Easy-Easy 엠블럼 + 타이틀 (이모지 제거, 브랜드 일관성)
+        st.markdown("""
+        <div style='display: flex; align-items: center; gap: 14px; margin: 0.25rem 0 0.5rem 0;'>
+            <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="title-emblem-back-app" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#c4b5fd"/>
+                        <stop offset="100%" stop-color="#8b5cf6"/>
+                    </linearGradient>
+                    <linearGradient id="title-emblem-front-app" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#818cf8"/>
+                        <stop offset="100%" stop-color="#4f46e5"/>
+                    </linearGradient>
+                </defs>
+                <rect x="2" y="2" width="22" height="22" rx="7" fill="url(#title-emblem-back-app)" opacity="0.6"/>
+                <rect x="16" y="16" width="22" height="22" rx="7" fill="url(#title-emblem-front-app)"/>
+            </svg>
+            <h1 style='margin: 0; padding: 0; line-height: 1.1;'>쉬운 문서 해석기</h1>
+        </div>
+        """, unsafe_allow_html=True)
         st.caption("어려운 기술 문서, 불필요한 사설 없이 핵심만 명확하게 짚어드립니다.")
         uploaded_file = st.file_uploader(
             "문서 파일 업로드 (PDF, TXT, DOCX)", 
