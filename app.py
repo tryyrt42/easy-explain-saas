@@ -1,9 +1,9 @@
 """
-Easy Explain — Landing Page UI 고도화 버전
+이지이지 — Landing Page UI 고도화 버전
 - 버그 수정 완료: 사이드바 패널(`>`) 및 버튼 완벽 복구
 - UX 보정 1: F5 새로고침 시 로그인 세션 유지 (st.query_params 활용)
 - UI 개선 1: 전체 레이아웃 하향 조정, 좌우 간격 대폭 확대
-- UI 개선 2: 좌측 상단 제목("Easy Explain") 및 아이콘 📄 추가 (용규님 요청 반영)
+- UI 개선 2: 좌측 상단 제목("이지이지") 및 아이콘 📄 추가 (용규님 요청 반영)
 """
 import docx  
 import io    
