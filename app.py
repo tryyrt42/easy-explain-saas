@@ -1,9 +1,8 @@
 """
-쉬운 문서 해석기 — 사이드바 복구 버전
-- 🔧 수정 1: 랜딩 페이지의 min-width 1200px 누수로 사이드바가 화면 밖으로 밀려나던 버그 제거
-- 🔧 수정 2: 사이드바 강제 노출 CSS 추가 (구버전/신버전 Streamlit 모두 대응)
-- 🔧 수정 3: 우측 상단 툴바 정밀 제거 (stToolbarActions만 타겟)
-- 🔧 수정 4: 업로더 ↔ 컨트롤러 반응형 하단 정렬 (flex-end)
+쉬운 문서 해석기 — Easy-Easy 브랜딩 + 랜딩 페이지 개선 버전
+- 🎨 추가: Easy-Easy 브랜드 헤더 (로고 + 텍스트)
+- 🎨 개선: 좌측 컬럼 폭 고정 (480px), 은은한 그라데이션 디바이더
+- 🎨 개선: 우측 이미지 위치 하강, 컬럼 간 간격 확장
 """
 import docx  
 import io    
@@ -16,7 +15,7 @@ from supabase import create_client, Client
 # ⚙️ 1. 페이지 설정
 # ============================================================
 st.set_page_config(
-    page_title="쉬운 문서 해석기",
+    page_title="Easy-Easy | 쉬운 문서 해석기",
     page_icon="📄",
     layout="wide",
     initial_sidebar_state="expanded" 
@@ -49,36 +48,28 @@ st.markdown("""
         height: 0 !important;
     }
     
-    /* === 🚨 우측 상단 Streamlit Cloud 버튼들 (Share/⭐/Edit/GitHub) 정밀 타격 === */
-    /* ⚠️ stToolbar 부모는 안 건드림 (사이드바 토글 영향 없음) */
-    /* stToolbarActions만 숨김 — 여기에 Share, Star, Edit, GitHub 다 들어있음 */
+    /* === 🚨 우측 상단 Streamlit Cloud 버튼들 정밀 타격 === */
     [data-testid="stToolbarActions"] {
         display: none !important;
     }
-    
-    /* 백업: Streamlit Cloud의 viewerBadge 계열 (GitHub 별/링크) */
     [class*="viewerBadge_container"],
     [class*="viewerBadge_link"],
     [class*="ViewerBadge"] {
         display: none !important;
     }
-    
-    /* Deploy 버튼류 */
     .stDeployButton,
     .stAppDeployButton,
     [data-testid="stMainMenu"] {
         display: none !important;
     }
     
-    /* === 🚨 사이드바 무조건 보이게 (toolbar 제거해도 사이드바는 살아있음) === */
+    /* === 🚨 사이드바 무조건 보이게 === */
     [data-testid="stSidebar"] {
         display: block !important;
         visibility: visible !important;
         background-color: #1e293b !important;
         border-right: 1px solid rgba(255,255,255,0.1) !important;
     }
-    
-    /* === 사이드바 토글 버튼은 stToolbar와 별개 셀렉터라 안전 === */
     [data-testid="collapsedControl"],
     [data-testid="stSidebarCollapsedControl"],
     [data-testid="stSidebarCollapseButton"],
@@ -125,12 +116,10 @@ st.markdown("""
         border-radius: 12px !important; 
     }
     
-    /* === 🎯 업로더 ↔ 컨트롤러 하단 자동 정렬 (반응형 보장) === */
-    /* :has()로 파일 업로더가 포함된 row만 타겟 — PDF/결과 패널에는 영향 없음 */
+    /* === 🎯 업로더 ↔ 컨트롤러 하단 자동 정렬 (반응형) === */
     div[data-testid="stHorizontalBlock"]:has([data-testid="stFileUploader"]) {
         align-items: flex-end !important;
     }
-    /* 안의 컬럼들이 stretch되지 않고 자기 내용 높이만큼만 차지하도록 */
     div[data-testid="stHorizontalBlock"]:has([data-testid="stFileUploader"]) 
     > div[data-testid="column"],
     div[data-testid="stHorizontalBlock"]:has([data-testid="stFileUploader"]) 
@@ -149,7 +138,6 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 MODEL_NAME = "gemini-3.1-flash-lite" 
 
-# F5 방어 로직
 if st.session_state.get("user") is None and "logged_in_email" in st.query_params:
     saved_email = st.query_params["logged_in_email"]
     response = supabase.table("users").select("*").eq("email", saved_email).execute()
@@ -159,13 +147,12 @@ if st.session_state.get("user") is None and "logged_in_email" in st.query_params
         st.query_params.clear()
 
 # ============================================================
-# 💎 3. 요금제 팝업(모달) 창
+# 💎 3. 요금제 팝업
 # ============================================================
 @st.dialog("💎 플랜 업그레이드 안내")
 def show_pricing_modal():
     st.write("서비스의 무제한 기능을 경험해 보세요.")
     col_free, col_pro = st.columns(2)
-
     user_info = st.session_state.get("user", {})
 
     with col_free:
@@ -195,25 +182,68 @@ def show_pricing_modal():
                 st.link_button("Pro 구독하기", final_checkout_link, type="primary", use_container_width=True)
 
 # ============================================================
-# 🚪 4. 랜딩 페이지 — 문제의 min-width 1200px 제거!
+# 🚪 4. 랜딩 페이지 — Easy-Easy 브랜딩 + 개선된 레이아웃
 # ============================================================
 if st.session_state.get("user") is None:
+    # 🎨 랜딩 페이지 전용 스타일
     st.markdown("""
     <style>
-        /* 🔧 수정: min-width 1200px 제거 (이게 사이드바를 밀어내던 원인!) */
+        /* === 🔷 Easy-Easy 브랜드 헤더 === */
+        .brand-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin: 0 0 3.5rem 0;
+            padding-top: 0.5rem;
+        }
+        .brand-name {
+            font-size: 1.7rem;
+            font-weight: 800;
+            background: linear-gradient(90deg, #d8b4fe 0%, #818cf8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.03em;
+            line-height: 1;
+        }
+        
+        /* === 컬럼 레이아웃: 간격 확장 + 상단 정렬 === */
         div[data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
-            align-items: center !important;
+            align-items: flex-start !important;
+            gap: 4rem !important;
         }
-        /* 좌측 컬럼 550px 고정 */
+        
+        /* === 좌측 컬럼: 480px 고정 (반응형 깨짐 방지) === */
         div[data-testid="column"]:first-child {
-            flex: 0 0 550px !important; 
-            border-right: 1px solid rgba(255, 255, 255, 0.2);
-            padding-right: 3rem !important;
+            flex: 0 0 480px !important; 
+            min-width: 480px !important;
+            max-width: 480px !important;
+            padding-right: 2.5rem !important;
+            position: relative;
         }
+        
+        /* === 🌟 은은한 그라데이션 수직 디바이더 === */
+        /* 위/아래로 페이드아웃되어 자연스럽게 보임 */
+        div[data-testid="column"]:first-child::after {
+            content: '';
+            position: absolute;
+            top: 8%;
+            bottom: 8%;
+            right: 0;
+            width: 1px;
+            background: linear-gradient(180deg, 
+                transparent 0%, 
+                rgba(168, 85, 247, 0.28) 30%, 
+                rgba(168, 85, 247, 0.28) 70%, 
+                transparent 100%
+            );
+        }
+        
+        /* === 우측 컬럼: 이미지 아래로 내림 === */
         div[data-testid="column"]:nth-child(2) {
             flex: 1 1 auto !important;
-            padding-left: 3rem !important;
+            padding-left: 2.5rem !important;
+            padding-top: 5rem !important;
         }
         [data-testid="stImage"] img {
             border-radius: 12px;
@@ -221,6 +251,30 @@ if st.session_state.get("user") is None:
             box-shadow: 0px 4px 40px rgba(129, 140, 248, 0.35);
         }
     </style>
+    """, unsafe_allow_html=True)
+    
+    # 🔷 Easy-Easy 브랜드 헤더 (로고 SVG + 텍스트)
+    # 두 개의 둥근 사각형이 겹친 형태 — "Easy × 2" 이중성 + purple→indigo 그라데이션
+    st.markdown("""
+    <div class="brand-header">
+        <svg width="42" height="42" viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="ee-grad-back" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#c4b5fd"/>
+                    <stop offset="100%" stop-color="#8b5cf6"/>
+                </linearGradient>
+                <linearGradient id="ee-grad-front" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#818cf8"/>
+                    <stop offset="100%" stop-color="#4f46e5"/>
+                </linearGradient>
+            </defs>
+            <!-- 뒤쪽 사각형 (반투명) -->
+            <rect x="3" y="3" width="22" height="22" rx="7" fill="url(#ee-grad-back)" opacity="0.6"/>
+            <!-- 앞쪽 사각형 (솔리드) -->
+            <rect x="17" y="17" width="22" height="22" rx="7" fill="url(#ee-grad-front)"/>
+        </svg>
+        <span class="brand-name">Easy-Easy</span>
+    </div>
     """, unsafe_allow_html=True)
 
     col_left, col_right = st.columns([1, 2])
@@ -329,7 +383,6 @@ with top_left:
     )
 
 with top_right:
-    # 💡 margin-top 안 씀! 부모 row의 align-items: flex-end가 자동 정렬해줌 (반응형)
     with st.container(border=True):
         st.markdown("### 해석 컨트롤러")
         selected_mode = st.selectbox(
@@ -361,9 +414,7 @@ if st.session_state.get("file_id") != file_id:
                 page_images.append(pix.tobytes("png"))
                 page_texts.append(page.get_text())
             doc.close()
-        
         else:
-            # TXT / DOCX 처리
             raw_text = ""
             if file_ext == "txt":
                 raw_bytes = uploaded_file.read()
