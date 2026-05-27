@@ -467,7 +467,7 @@ if st.session_state.get("user") is None:
                 )
                 st.markdown(
                     "<p style='font-size: 0.8rem; color: #94a3b8; text-align: center; margin-top: 8px;'>"
-                    "📧 입력한 이메일로 6자리 인증 코드가 발송됩니다"
+                    "입력한 이메일로 6자리 인증 코드가 발송됩니다"
                     "</p>", 
                     unsafe_allow_html=True
                 )
