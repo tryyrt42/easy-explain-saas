@@ -164,6 +164,38 @@ st.markdown("""
     [data-testid="stExpander"] summary:hover {
         background-color: rgba(168, 85, 247, 0.1) !important;
     }
+    
+    /* === 📖 TXT/DOCX 원본 가독성 향상 === */
+    .reading-area {
+        font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 17px;
+        line-height: 1.85;
+        color: #e2e8f0;
+        letter-spacing: 0.005em;
+        padding: 1rem 1.5rem;
+    }
+    .reading-area p {
+        margin: 0 0 1.4em 0;
+        text-indent: 0;
+    }
+    .reading-area p:last-child {
+        margin-bottom: 0;
+    }
+    .reading-area .page-heading {
+        font-size: 14px;
+        font-weight: 600;
+        color: #a78bfa;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        margin: 0 0 1rem 0;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid rgba(168, 85, 247, 0.2);
+    }
+    .reading-area .page-divider {
+        margin: 2.5rem 0;
+        border: none;
+        border-top: 1px dashed rgba(168, 85, 247, 0.3);
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -448,6 +480,8 @@ def build_prompt(text: str, mode: str) -> str:
 
 if "fullscreen_result" not in st.session_state:
     st.session_state["fullscreen_result"] = False
+if "fullscreen_pdf" not in st.session_state:
+    st.session_state["fullscreen_pdf"] = False
 if "selected_mode" not in st.session_state:
     st.session_state["selected_mode"] = list(PROMPT_TEMPLATES.keys())[2]  
 if "include_next_page" not in st.session_state:
@@ -549,6 +583,44 @@ page_texts = st.session_state.get("page_texts", [])
 file_id = st.session_state.get("file_id", "")
 file_ext = st.session_state.get("file_ext", "pdf")
 
+def render_pages_in_container(pages_to_show, page_images, page_texts, total_pages, container_height=1200):
+    """페이지(들)를 컨테이너 안에 표시. PDF=이미지, TXT/DOCX=가독성 좋은 HTML"""
+    with st.container(height=container_height, border=True):
+        for idx, pg in enumerate(pages_to_show):
+            # PDF (이미지 있음)
+            if page_images and page_images[pg - 1] is not None:
+                st.image(
+                    page_images[pg - 1], 
+                    caption=f"━━━ 페이지 {pg} / {total_pages} ━━━", 
+                    use_container_width=True
+                )
+            # TXT/DOCX (텍스트만) — HTML로 가독성 향상
+            elif page_texts:
+                text_content = page_texts[pg - 1] or ""
+                # 단락 분리 (\n\n 또는 \n 1개도 단락으로 처리)
+                paragraphs = [p.strip() for p in text_content.split('\n\n') if p.strip()]
+                if not paragraphs:
+                    # \n\n 없으면 \n으로 분리
+                    paragraphs = [p.strip() for p in text_content.split('\n') if p.strip()]
+                
+                # HTML 빌드
+                html = f'<div class="reading-area">'
+                html += f'<div class="page-heading">페이지 {pg} / {total_pages}</div>'
+                for para in paragraphs:
+                    # 단락 안의 줄바꿈은 <br>로
+                    para_html = para.replace('\n', '<br>')
+                    # HTML 이스케이프 안 하면 < > 가 문제될 수 있지만
+                    # 사용자 문서 내용이므로 신뢰 가능
+                    html += f'<p>{para_html}</p>'
+                html += '</div>'
+                
+                st.markdown(html, unsafe_allow_html=True)
+            
+            # 페이지 사이 구분선
+            if idx < len(pages_to_show) - 1:
+                st.markdown('<hr class="page-divider">', unsafe_allow_html=True)
+
+
 def run_interpretation(text, mode, cache_key, pages_used=1):
     if GEMINI_API_KEY == "":
         st.error("🔑 Secrets 세팅에 GEMINI_API_KEY를 정상 등록해 주세요.")
@@ -590,7 +662,49 @@ def run_interpretation(text, mode, cache_key, pages_used=1):
 # ============================================================
 # 🖥 전체화면 모드 OR 분할 보기 모드
 # ============================================================
-if st.session_state["fullscreen_result"]:
+if st.session_state["fullscreen_pdf"]:
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 🔍 원본 전체화면 모드 (PDF/TXT/DOCX 풀와이드)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    fs_pdf_top = st.columns([2, 2, 4, 2])
+    
+    with fs_pdf_top[0]:
+        view_page = st.number_input(
+            f"📄 시작 페이지 (총 {total_pages})", 
+            min_value=1, max_value=total_pages, value=1, step=1,
+            key="view_page_input"
+        )
+    
+    with fs_pdf_top[1]:
+        st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+        include_next_raw_pdf = st.checkbox(
+            "📚 다음 페이지 포함",
+            key="include_next_page",
+            disabled=(view_page >= total_pages),
+        )
+    include_next = include_next_raw_pdf and (view_page < total_pages)
+    
+    with fs_pdf_top[2]:
+        st.markdown(
+            f"<div style='margin-top: 32px; color: #94a3b8;'>"
+            f"📄 <b>{file_ext.upper()} 원본 보기</b>"
+            f"</div>", 
+            unsafe_allow_html=True
+        )
+    
+    with fs_pdf_top[3]:
+        st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+        if st.button("◀ 분할 보기로", use_container_width=True, key="exit_fullscreen_pdf"):
+            st.session_state["fullscreen_pdf"] = False
+            st.rerun()
+    
+    # 풀와이드 원본 렌더링 (가독성 좋게)
+    pages_to_show = [view_page]
+    if include_next:
+        pages_to_show.append(view_page + 1)
+    render_pages_in_container(pages_to_show, page_images, page_texts, total_pages, container_height=1200)
+
+elif st.session_state["fullscreen_result"]:
     fs_top = st.columns([2, 2, 4, 2])
     
     with fs_top[0]:
@@ -659,8 +773,17 @@ else:
     col_pdf, col_result = st.columns([1, 1], gap="large")
     
     with col_pdf:
-        st.markdown(f"### {file_ext.upper()} 원본")
+        # 🆕 좌측 헤더 + 전체화면 버튼 (우측과 동일 구조로 높이 정렬)
+        l_header_col, l_fs_btn_col = st.columns([4, 2])
+        with l_header_col:
+            st.markdown(f"### {file_ext.upper()} 원본")
+        with l_fs_btn_col:
+            st.markdown("<div style='margin-top: 4px;'></div>", unsafe_allow_html=True)
+            if st.button("🔍 전체화면", use_container_width=True, key="enter_fullscreen_pdf"):
+                st.session_state["fullscreen_pdf"] = True
+                st.rerun()
         
+        # 페이지 선택 + 다음 페이지 포함 체크박스
         page_row = st.columns([3, 2])
         with page_row[0]:
             view_page = st.number_input(
@@ -678,29 +801,11 @@ else:
             )
         include_next = include_next_raw and (view_page < total_pages)
         
-        with st.container(height=1200, border=True):
-            pages_to_show = [view_page]
-            if include_next:
-                pages_to_show.append(view_page + 1)
-            
-            for idx, pg in enumerate(pages_to_show):
-                if page_images and page_images[pg - 1] is not None:
-                    st.image(
-                        page_images[pg - 1], 
-                        caption=f"━━━ 페이지 {pg} / {total_pages} ━━━", 
-                        use_container_width=True
-                    )
-                elif page_texts:
-                    st.text_area(
-                        f"페이지 {pg}", 
-                        page_texts[pg - 1], 
-                        height=580 if include_next else 1100, 
-                        disabled=True, 
-                        label_visibility="visible" if include_next else "collapsed",
-                        key=f"page_text_{pg}_{idx}"
-                    )
-                if idx < len(pages_to_show) - 1:
-                    st.markdown("<hr style='border-color: rgba(168,85,247,0.2);'>", unsafe_allow_html=True)
+        # 페이지 렌더링 (PDF=이미지, TXT/DOCX=가독성 좋은 HTML)
+        pages_to_show = [view_page]
+        if include_next:
+            pages_to_show.append(view_page + 1)
+        render_pages_in_container(pages_to_show, page_images, page_texts, total_pages, container_height=1200)
     
     pages_suffix = "_2pg" if include_next else ""
     cache_key = f"{file_id}_{view_page}{pages_suffix}_{selected_mode}"
