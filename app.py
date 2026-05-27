@@ -1,5 +1,5 @@
 """
-쉬운 문서 해석기 — Easy-Easy 브랜딩 + 랜딩 페이지 개선 버전
+쉬운 문서 해석기 — Easy-Easㅇy 브랜딩 + 랜딩 페이지 개선 버전
 - 🎨 유지: Easy-Easy 브랜드 헤더, 좌우 레이아웃 고정, 은은한 수직선
 - 🎨 유지: 좌우 패널 세로 길이 대폭 확장 (스크롤 최소화 1200px)
 - 🚀 극대화: '📖 원서 독해 & 영단어 학습 모드' 프롬프트 엔진 풀업그레이드
@@ -437,7 +437,7 @@ if st.session_state.get("user") is None:
     col_left, col_right = st.columns([1, 2])
     
     with col_left:
-        st.markdown("<h1 style='font-size: 3.2rem; line-height: 1.2;'>어려운 문서<br>이제 쉽게 읽으세요.</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='font-size: 3.2rem; line-height: 1.2;'>어려운 문서<br>이제 쉽게 읽으세요</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #f8fafc; font-size: 1.1rem; margin-top: 1.5rem; margin-bottom: 1.2rem;'>복잡한 매뉴얼, 번역기 돌리며 고생하지 마세요. AI가 핵심만 짚어 가장 이해하기 쉬운 한글로 설명해 드립니다.</p>", unsafe_allow_html=True)
         
         # 🆕 4가지 모드 뱃지 — SVG 엠블럼
