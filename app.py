@@ -7,6 +7,7 @@
 """
 import docx  
 import io    
+import re
 import streamlit as st
 import fitz  
 import google.generativeai as genai
@@ -264,185 +265,6 @@ st.markdown("""
         background-color: rgba(74, 222, 128, 0.18) !important;
     }
 </style>
-""", unsafe_allow_html=True)
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 📚 영단어 학습 모드 — 단어 테이블 호버 시 원본 텍스트 하이라이트
-# iframe srcdoc은 same-origin이라 parent.document 접근 가능
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-st.markdown("""
-<iframe srcdoc='<script>
-function escapeRegex(s) {
-  return s.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&");
-}
-
-function buildSearchRegex(term) {
-  // 일반적인 영어 인플렉션 접미사 허용 (stuff → stuffed, stuffing 등)
-  var suffix = "(?:s|es|ed|ing|er|est|d|ly|ies|ied|n)?";
-  var pattern;
-  
-  if (term.indexOf("~") !== -1) {
-    // "tuck ~ under" 같은 패턴 → 중간에 단어 허용
-    var parts = term.split("~").map(function(p) { return p.trim(); }).filter(function(p) { return p; });
-    pattern = parts.map(function(p) {
-      var ws = p.split(/\\s+/);
-      return ws.map(function(w) { return escapeRegex(w) + suffix; }).join("\\\\s+");
-    }).join("[^\\\\n.!?]{1,50}?");
-  } else {
-    // 일반 단어/구문
-    var words = term.split(/\\s+/);
-    pattern = words.map(function(w) { return escapeRegex(w) + suffix; }).join("\\\\s+");
-  }
-  
-  return new RegExp("\\\\b" + pattern + "\\\\b", "gi");
-}
-
-function setupHoverForTerm(term, cellElement, readingAreas, doc) {
-  var regex;
-  try {
-    regex = buildSearchRegex(term);
-  } catch(e) { return; }
-  
-  var matchedSpans = [];
-  
-  readingAreas.forEach(function(area) {
-    var walker = doc.createTreeWalker(area, NodeFilter.SHOW_TEXT, {
-      acceptNode: function(node) {
-        if (!node.parentElement) return NodeFilter.FILTER_REJECT;
-        if (node.parentElement.classList.contains("vocab-mark")) {
-          return NodeFilter.FILTER_REJECT;
-        }
-        return NodeFilter.FILTER_ACCEPT;
-      }
-    });
-    
-    var textNodes = [];
-    var node;
-    while ((node = walker.nextNode())) {
-      textNodes.push(node);
-    }
-    
-    textNodes.forEach(function(textNode) {
-      var text = textNode.nodeValue;
-      var fragments = [];
-      var lastIndex = 0;
-      var found = false;
-      
-      regex.lastIndex = 0;
-      var match;
-      while ((match = regex.exec(text)) !== null) {
-        found = true;
-        if (match.index > lastIndex) {
-          fragments.push(doc.createTextNode(text.slice(lastIndex, match.index)));
-        }
-        var span = doc.createElement("span");
-        span.className = "vocab-mark";
-        span.dataset.word = term;
-        span.textContent = match[0];
-        fragments.push(span);
-        matchedSpans.push(span);
-        lastIndex = regex.lastIndex;
-      }
-      
-      if (!found) return;
-      
-      if (lastIndex < text.length) {
-        fragments.push(doc.createTextNode(text.slice(lastIndex)));
-      }
-      
-      var parentNode = textNode.parentNode;
-      fragments.forEach(function(frag) { parentNode.insertBefore(frag, textNode); });
-      parentNode.removeChild(textNode);
-    });
-  });
-  
-  if (matchedSpans.length === 0) return;
-  
-  cellElement.classList.add("vocab-source");
-  
-  var hoverTimeoutId;
-  cellElement.addEventListener("mouseenter", function() {
-    clearTimeout(hoverTimeoutId);
-    matchedSpans.forEach(function(s) { s.classList.add("highlighted"); });
-    if (matchedSpans[0]) {
-      matchedSpans[0].scrollIntoView({behavior: "smooth", block: "center"});
-    }
-  });
-  cellElement.addEventListener("mouseleave", function() {
-    hoverTimeoutId = setTimeout(function() {
-      matchedSpans.forEach(function(s) { s.classList.remove("highlighted"); });
-    }, 120);
-  });
-}
-
-function setupVocabHover() {
-  try {
-    var doc = parent.document;
-    var readingAreas = doc.querySelectorAll(".reading-area");
-    if (readingAreas.length === 0) return;
-    
-    // 이전 마크가 있고 내용이 안 바뀌었으면 스킵
-    var currentLen = 0;
-    readingAreas.forEach(function(a) { currentLen += a.textContent.length; });
-    if (doc.querySelector(".vocab-mark") && currentLen === parent.__lastVocabLen) return;
-    
-    // 이전 마크 제거
-    doc.querySelectorAll(".vocab-mark").forEach(function(mark) {
-      var p = mark.parentNode;
-      p.replaceChild(doc.createTextNode(mark.textContent), mark);
-      p.normalize();
-    });
-    doc.querySelectorAll(".vocab-source").forEach(function(el) {
-      el.classList.remove("vocab-source");
-    });
-    
-    parent.__lastVocabLen = currentLen;
-    
-    // 영단어 테이블 찾기
-    var tables = doc.querySelectorAll("table");
-    tables.forEach(function(table) {
-      if (table.closest(".reading-area")) return;
-      
-      var rows = Array.from(table.querySelectorAll("tbody tr"));
-      if (rows.length === 0) {
-        rows = Array.from(table.querySelectorAll("tr")).slice(1);
-      }
-      if (rows.length === 0) return;
-      
-      // 첫 번째 칸이 영어인 행이 절반 이상인지 검증
-      var englishRows = 0;
-      rows.forEach(function(row) {
-        var fc = row.querySelector("td:first-child");
-        if (fc && /[a-zA-Z]{2,}/.test(fc.textContent)) englishRows++;
-      });
-      if (englishRows < rows.length * 0.5) return;
-      
-      rows.forEach(function(row) {
-        var firstCell = row.querySelector("td:first-child");
-        if (!firstCell) return;
-        var term = firstCell.textContent.trim();
-        if (term.length < 2) return;
-        var letterCount = (term.match(/[a-zA-Z]/g) || []).length;
-        if (letterCount < 2) return;
-        setupHoverForTerm(term, firstCell, readingAreas, doc);
-      });
-    });
-  } catch(e) {
-    // CORS 등 에러는 조용히 무시
-  }
-}
-
-// 다양한 시점에서 실행 (DOM 로딩 대응)
-[200, 600, 1500, 3000].forEach(function(d) { setTimeout(setupVocabHover, d); });
-
-// DOM 변화 감지 (디바운스 300ms)
-try {
-  new MutationObserver(function() {
-    clearTimeout(parent.__vocabDebounce);
-    parent.__vocabDebounce = setTimeout(setupVocabHover, 300);
-  }).observe(parent.document.body, {childList: true, subtree: true});
-} catch(e) {}
-</script>' style="display:none;width:0;height:0;border:0;position:absolute;"></iframe>
 """, unsafe_allow_html=True)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -844,7 +666,7 @@ if st.session_state.get("user") is None:
         modes_preview = [
             (
                 "1타 강사 해설 모드", 
-                "assets/mode_instructor.png", 
+                "assets/mode_instructor.webp", 
                 "강의실에서 듣는 듯 명쾌한 해설. 개념과 원리를 차근차근 풀어줍니다.",
                 """<svg width="28" height="28" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
                     <rect x="3" y="4" width="18" height="16" rx="1.5" fill="none" stroke="#818cf8" stroke-width="1.5"/>
@@ -855,7 +677,7 @@ if st.session_state.get("user") is None:
             ),
             (
                 "비유 모드", 
-                "assets/mode_analogy.png", 
+                "assets/mode_analogy.webp", 
                 "어려운 개념을 일상 비유로 직관적으로 이해. 의사·요리사·운전 등 친숙한 비유 활용.",
                 """<svg width="28" height="28" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
                     <path d="M3 9 L7 5 L11 9 L7 13 Z" fill="#c084fc" opacity="0.75"/>
@@ -865,7 +687,7 @@ if st.session_state.get("user") is None:
             ),
             (
                 "촌철살인 동네형 모드", 
-                "assets/mode_brother.png", 
+                "assets/mode_brother.webp", 
                 "동네 형이 풀어주듯 핵심만 콕콕. 군더더기 없이 본질만 짚어줍니다.",
                 """<svg width="28" height="28" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
                     <circle cx="12" cy="12" r="9" fill="none" stroke="#f472b6" stroke-width="1.5" opacity="0.4"/>
@@ -876,7 +698,7 @@ if st.session_state.get("user") is None:
             ),
             (
                 "원서 독해 & 영단어 학습 모드", 
-                "assets/mode_english.png", 
+                "assets/mode_english.webp", 
                 "원서·논문을 읽으며 핵심 영단어/숙어/구문까지 한 번에 학습.",
                 """<svg width="28" height="28" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
                     <path d="M3 5.5 C 3 5.5, 7 4, 12 5.5 C 17 4, 21 5.5, 21 5.5 L 21 19 C 21 19, 17 17.5, 12 19 C 7 17.5, 3 19, 3 19 Z" fill="none" stroke="#4ade80" stroke-width="1.5" stroke-linejoin="round"/>
@@ -899,7 +721,7 @@ if st.session_state.get("user") is None:
                 unsafe_allow_html=True
             )
             try:
-                st.image(img_path, use_container_width=True, output_format="PNG")
+                st.image(img_path, use_container_width=True)
             except Exception:
                 st.info(f"💡 `{img_path}` 파일이 필요합니다.")
             st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
@@ -1125,7 +947,7 @@ with st.expander("문서 & 해석 설정", expanded=True):
                     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
                     for i in range(len(doc)):
                         page = doc[i]
-                        pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
+                        pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
                         page_images.append(pix.tobytes("png"))
                         page_texts.append(page.get_text())
                     doc.close()
@@ -1181,8 +1003,157 @@ page_texts = st.session_state.get("page_texts", [])
 file_id = st.session_state.get("file_id", "")
 file_ext = st.session_state.get("file_ext", "pdf")
 
-def render_pages_in_container(pages_to_show, page_images, page_texts, total_pages, container_height=1200):
-    """페이지(들)를 컨테이너 안에 표시. PDF=이미지, TXT/DOCX=가독성 좋은 HTML"""
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 📚 영단어 학습 모드 — 호버 하이라이트 (서버사이드 처리 + CSS :has())
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def build_vocab_search_pattern(term):
+    """영단어 매칭용 정규식 (인플렉션 + 'tuck ~ under' 패턴 지원)
+    - 일반 접미사: s, es, ed, ing, er, est, ly, ies, ied, n
+    - 자음 중복: [자음] + ing/ed/er (quit→quitting, stop→stopped, run→running 등)"""
+    suffix = (
+        r'(?:s|es|ed|ing|er|est|d|ly|ies|ied|n'
+        r'|[bcdfghjklmnpqrstvwxyz](?:ing|ed|er)'
+        r')?'
+    )
+    if '~' in term:
+        parts = [p.strip() for p in term.split('~') if p.strip()]
+        sub_patterns = []
+        for part in parts:
+            words = part.split()
+            sub_patterns.append(r'\s+'.join(re.escape(w) + suffix for w in words))
+        pattern = r'[^\n.!?]{1,50}?'.join(sub_patterns)
+    else:
+        words = term.split()
+        pattern = r'\s+'.join(re.escape(w) + suffix for w in words)
+    return r'\b' + pattern + r'\b'
+
+
+def process_response_for_vocab(response_text):
+    """마크다운 응답에서 영단어 테이블 찾아 HTML로 변환 + 단어 리스트 반환"""
+    terms = []
+    
+    table_pattern = re.compile(
+        r'(\|[^\n]+\|\n)'             # 헤더
+        r'(\|[\s\-:|]+\|\n)'           # 구분선
+        r'((?:\|[^\n]+\|(?:\n|$))+)',  # 본문 행들
+        re.MULTILINE
+    )
+    
+    def replace_table(match):
+        header = match.group(1)
+        body = match.group(3)
+        
+        header_cells = [c.strip() for c in header.strip().strip('|').split('|')]
+        
+        body_rows = []
+        for line in body.strip().split('\n'):
+            if line.strip():
+                cells = [c.strip() for c in line.strip().strip('|').split('|')]
+                body_rows.append(cells)
+        
+        if not body_rows:
+            return match.group(0)
+        
+        # 영단어 테이블인지 확인 (첫 칸이 영어인 행이 50% 이상)
+        english_first = sum(
+            1 for r in body_rows 
+            if r and re.search(r'[a-zA-Z]{2,}', r[0])
+        )
+        if english_first < len(body_rows) * 0.5:
+            return match.group(0)
+        
+        # 단어 추출
+        local_terms = []
+        for row in body_rows:
+            if row and re.search(r'[a-zA-Z]{2,}', row[0]):
+                local_terms.append(row[0])
+                terms.append(row[0])
+        
+        # HTML 테이블 빌드
+        html = ['<table>', '<thead><tr>']
+        for h in header_cells:
+            html.append(f'<th>{h}</th>')
+        html.append('</tr></thead><tbody>')
+        
+        for row in body_rows:
+            html.append('<tr>')
+            for i, cell in enumerate(row):
+                if i == 0 and cell in local_terms:
+                    safe = cell.replace('"', '&quot;')
+                    html.append(f'<td class="vocab-source" data-word="{safe}">{cell}</td>')
+                else:
+                    html.append(f'<td>{cell}</td>')
+            html.append('</tr>')
+        html.append('</tbody></table>')
+        
+        return '\n\n' + ''.join(html) + '\n\n'
+    
+    new_text = table_pattern.sub(replace_table, response_text)
+    return new_text, terms
+
+
+def annotate_text_with_vocab(text, terms):
+    """원본 텍스트에서 영단어를 <span class='vocab-mark'>로 감싸기"""
+    if not terms:
+        return text
+    
+    matches = []
+    for term in terms:
+        try:
+            pattern = build_vocab_search_pattern(term)
+            for m in re.finditer(pattern, text, re.IGNORECASE):
+                matches.append((m.start(), m.end(), term, m.group(0)))
+        except re.error:
+            continue
+    
+    if not matches:
+        return text
+    
+    # 겹치는 매치 제거 (앞쪽 + 더 긴 것 우선)
+    matches.sort(key=lambda x: (x[0], -(x[1] - x[0])))
+    non_overlapping = []
+    for m in matches:
+        if not non_overlapping or m[0] >= non_overlapping[-1][1]:
+            non_overlapping.append(m)
+    
+    result = []
+    last_end = 0
+    for start, end, term, matched_text in non_overlapping:
+        result.append(text[last_end:start])
+        safe_term = term.replace('"', '&quot;')
+        result.append(f'<span class="vocab-mark" data-word="{safe_term}">{matched_text}</span>')
+        last_end = end
+    result.append(text[last_end:])
+    return ''.join(result)
+
+
+def build_vocab_hover_css(terms):
+    """CSS :has() 선택자로 양방향 호버 하이라이트 (JS 불필요)"""
+    if not terms:
+        return ''
+    rules = []
+    seen = set()
+    for term in terms:
+        if term in seen:
+            continue
+        seen.add(term)
+        safe = term.replace('\\', '\\\\').replace('"', '\\"')
+        rules.append(
+            f'body:has([data-word="{safe}"]:hover) .vocab-mark[data-word="{safe}"] {{ '
+            f'background-color: #fde047 !important; color: #422006 !important; '
+            f'font-weight: 600; box-shadow: 0 0 0 1px #fbbf24; }}'
+        )
+        rules.append(
+            f'body:has([data-word="{safe}"]:hover) .vocab-source[data-word="{safe}"] {{ '
+            f'background-color: rgba(74, 222, 128, 0.22) !important; }}'
+        )
+    return '<style>' + '\n'.join(rules) + '</style>'
+
+
+def render_pages_in_container(pages_to_show, page_images, page_texts, total_pages, vocab_terms=None, container_height=1200):
+    """페이지(들)를 컨테이너 안에 표시. PDF=이미지, TXT/DOCX=가독성 좋은 HTML
+    vocab_terms: 영단어 학습 모드 시 원문에서 하이라이트할 단어 리스트"""
     with st.container(height=container_height, border=True):
         for idx, pg in enumerate(pages_to_show):
             # PDF (이미지 있음)
@@ -1205,6 +1176,9 @@ def render_pages_in_container(pages_to_show, page_images, page_texts, total_page
                 html = f'<div class="reading-area">'
                 html += f'<div class="page-heading">페이지 {pg} / {total_pages}</div>'
                 for para in paragraphs:
+                    # 🆕 영단어 모드: 단어 하이라이트 마킹 먼저
+                    if vocab_terms:
+                        para = annotate_text_with_vocab(para, vocab_terms)
                     # 단락 안의 줄바꿈은 <br>로
                     para_html = para.replace('\n', '<br>')
                     # HTML 이스케이프 안 하면 < > 가 문제될 수 있지만
@@ -1361,7 +1335,16 @@ elif st.session_state["fullscreen_result"]:
     
     with st.container(height=1200, border=True):
         if is_cached:
-            st.markdown(st.session_state["interpret_cache"][cache_key])
+            # 🆕 영단어 모드: 테이블 HTML 변환 + 호버 CSS (전체화면에서도 일관된 렌더링)
+            response_raw_fs = st.session_state["interpret_cache"][cache_key]
+            is_english_mode_fs = "원서 독해" in selected_mode or "영단어" in selected_mode
+            if is_english_mode_fs:
+                response_processed_fs, vocab_terms_fs = process_response_for_vocab(response_raw_fs)
+                if vocab_terms_fs:
+                    st.markdown(build_vocab_hover_css(vocab_terms_fs), unsafe_allow_html=True)
+                st.markdown(response_processed_fs, unsafe_allow_html=True)
+            else:
+                st.markdown(response_raw_fs)
         else:
             num_pages_label = 2 if include_next else 1
             st.info(f"👆 위의 **[✨ {num_pages_label}페이지 해석]** 버튼을 눌러주세요.")
@@ -1403,11 +1386,26 @@ else:
         pages_to_show = [view_page]
         if include_next:
             pages_to_show.append(view_page + 1)
-        render_pages_in_container(pages_to_show, page_images, page_texts, total_pages, container_height=1200)
-    
-    pages_suffix = "_2pg" if include_next else ""
-    cache_key = f"{file_id}_{view_page}{pages_suffix}_{selected_mode}"
-    is_cached = cache_key in st.session_state.get("interpret_cache", {})
+        
+        # 🆕 영단어 학습 모드: 캐시된 응답에서 단어 추출 → 원문에 마킹
+        pages_suffix = "_2pg" if include_next else ""
+        cache_key = f"{file_id}_{view_page}{pages_suffix}_{selected_mode}"
+        is_cached = cache_key in st.session_state.get("interpret_cache", {})
+        
+        vocab_terms = []
+        response_processed = ""
+        if is_cached:
+            response_raw = st.session_state["interpret_cache"][cache_key]
+            is_english_mode = "원서 독해" in selected_mode or "영단어" in selected_mode
+            if is_english_mode:
+                response_processed, vocab_terms = process_response_for_vocab(response_raw)
+            else:
+                response_processed = response_raw
+        
+        render_pages_in_container(
+            pages_to_show, page_images, page_texts, total_pages, 
+            vocab_terms=vocab_terms, container_height=1200
+        )
     
     with col_result:
         header_col, fs_btn_col = st.columns([4, 2])
@@ -1455,6 +1453,9 @@ else:
                     st.rerun()
             
             if is_cached:
-                st.markdown(st.session_state["interpret_cache"][cache_key])
+                # 🆕 영단어 모드: 동적 CSS로 양방향 호버 (JS 불필요, CSS :has() 사용)
+                if vocab_terms:
+                    st.markdown(build_vocab_hover_css(vocab_terms), unsafe_allow_html=True)
+                st.markdown(response_processed if response_processed else st.session_state["interpret_cache"][cache_key], unsafe_allow_html=True)
             elif not interpret_btn:
                 st.info(f"👆 상단의 **[✨ {len(pages_to_show)}페이지 해석]** 버튼을 눌러주세요.")
