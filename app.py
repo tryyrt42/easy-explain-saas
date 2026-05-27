@@ -242,7 +242,207 @@ st.markdown("""
         border: none;
         border-top: 1px dashed rgba(168, 85, 247, 0.3);
     }
+    
+    /* === 📚 영단어 학습 모드 — 호버 시 원본 하이라이트 === */
+    .vocab-mark {
+        transition: background-color 0.18s, color 0.18s, box-shadow 0.18s;
+        border-radius: 3px;
+        padding: 0 2px;
+    }
+    .vocab-mark.highlighted {
+        background-color: #fde047 !important;
+        color: #422006 !important;
+        font-weight: 600;
+        box-shadow: 0 0 0 1px #fbbf24;
+    }
+    .vocab-source {
+        cursor: help !important;
+        transition: background-color 0.15s !important;
+        position: relative;
+    }
+    .vocab-source:hover {
+        background-color: rgba(74, 222, 128, 0.18) !important;
+    }
 </style>
+""", unsafe_allow_html=True)
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 📚 영단어 학습 모드 — 단어 테이블 호버 시 원본 텍스트 하이라이트
+# iframe srcdoc은 same-origin이라 parent.document 접근 가능
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+st.markdown("""
+<iframe srcdoc='<script>
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&");
+}
+
+function buildSearchRegex(term) {
+  // 일반적인 영어 인플렉션 접미사 허용 (stuff → stuffed, stuffing 등)
+  var suffix = "(?:s|es|ed|ing|er|est|d|ly|ies|ied|n)?";
+  var pattern;
+  
+  if (term.indexOf("~") !== -1) {
+    // "tuck ~ under" 같은 패턴 → 중간에 단어 허용
+    var parts = term.split("~").map(function(p) { return p.trim(); }).filter(function(p) { return p; });
+    pattern = parts.map(function(p) {
+      var ws = p.split(/\\s+/);
+      return ws.map(function(w) { return escapeRegex(w) + suffix; }).join("\\\\s+");
+    }).join("[^\\\\n.!?]{1,50}?");
+  } else {
+    // 일반 단어/구문
+    var words = term.split(/\\s+/);
+    pattern = words.map(function(w) { return escapeRegex(w) + suffix; }).join("\\\\s+");
+  }
+  
+  return new RegExp("\\\\b" + pattern + "\\\\b", "gi");
+}
+
+function setupHoverForTerm(term, cellElement, readingAreas, doc) {
+  var regex;
+  try {
+    regex = buildSearchRegex(term);
+  } catch(e) { return; }
+  
+  var matchedSpans = [];
+  
+  readingAreas.forEach(function(area) {
+    var walker = doc.createTreeWalker(area, NodeFilter.SHOW_TEXT, {
+      acceptNode: function(node) {
+        if (!node.parentElement) return NodeFilter.FILTER_REJECT;
+        if (node.parentElement.classList.contains("vocab-mark")) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    
+    var textNodes = [];
+    var node;
+    while ((node = walker.nextNode())) {
+      textNodes.push(node);
+    }
+    
+    textNodes.forEach(function(textNode) {
+      var text = textNode.nodeValue;
+      var fragments = [];
+      var lastIndex = 0;
+      var found = false;
+      
+      regex.lastIndex = 0;
+      var match;
+      while ((match = regex.exec(text)) !== null) {
+        found = true;
+        if (match.index > lastIndex) {
+          fragments.push(doc.createTextNode(text.slice(lastIndex, match.index)));
+        }
+        var span = doc.createElement("span");
+        span.className = "vocab-mark";
+        span.dataset.word = term;
+        span.textContent = match[0];
+        fragments.push(span);
+        matchedSpans.push(span);
+        lastIndex = regex.lastIndex;
+      }
+      
+      if (!found) return;
+      
+      if (lastIndex < text.length) {
+        fragments.push(doc.createTextNode(text.slice(lastIndex)));
+      }
+      
+      var parentNode = textNode.parentNode;
+      fragments.forEach(function(frag) { parentNode.insertBefore(frag, textNode); });
+      parentNode.removeChild(textNode);
+    });
+  });
+  
+  if (matchedSpans.length === 0) return;
+  
+  cellElement.classList.add("vocab-source");
+  
+  var hoverTimeoutId;
+  cellElement.addEventListener("mouseenter", function() {
+    clearTimeout(hoverTimeoutId);
+    matchedSpans.forEach(function(s) { s.classList.add("highlighted"); });
+    if (matchedSpans[0]) {
+      matchedSpans[0].scrollIntoView({behavior: "smooth", block: "center"});
+    }
+  });
+  cellElement.addEventListener("mouseleave", function() {
+    hoverTimeoutId = setTimeout(function() {
+      matchedSpans.forEach(function(s) { s.classList.remove("highlighted"); });
+    }, 120);
+  });
+}
+
+function setupVocabHover() {
+  try {
+    var doc = parent.document;
+    var readingAreas = doc.querySelectorAll(".reading-area");
+    if (readingAreas.length === 0) return;
+    
+    // 이전 마크가 있고 내용이 안 바뀌었으면 스킵
+    var currentLen = 0;
+    readingAreas.forEach(function(a) { currentLen += a.textContent.length; });
+    if (doc.querySelector(".vocab-mark") && currentLen === parent.__lastVocabLen) return;
+    
+    // 이전 마크 제거
+    doc.querySelectorAll(".vocab-mark").forEach(function(mark) {
+      var p = mark.parentNode;
+      p.replaceChild(doc.createTextNode(mark.textContent), mark);
+      p.normalize();
+    });
+    doc.querySelectorAll(".vocab-source").forEach(function(el) {
+      el.classList.remove("vocab-source");
+    });
+    
+    parent.__lastVocabLen = currentLen;
+    
+    // 영단어 테이블 찾기
+    var tables = doc.querySelectorAll("table");
+    tables.forEach(function(table) {
+      if (table.closest(".reading-area")) return;
+      
+      var rows = Array.from(table.querySelectorAll("tbody tr"));
+      if (rows.length === 0) {
+        rows = Array.from(table.querySelectorAll("tr")).slice(1);
+      }
+      if (rows.length === 0) return;
+      
+      // 첫 번째 칸이 영어인 행이 절반 이상인지 검증
+      var englishRows = 0;
+      rows.forEach(function(row) {
+        var fc = row.querySelector("td:first-child");
+        if (fc && /[a-zA-Z]{2,}/.test(fc.textContent)) englishRows++;
+      });
+      if (englishRows < rows.length * 0.5) return;
+      
+      rows.forEach(function(row) {
+        var firstCell = row.querySelector("td:first-child");
+        if (!firstCell) return;
+        var term = firstCell.textContent.trim();
+        if (term.length < 2) return;
+        var letterCount = (term.match(/[a-zA-Z]/g) || []).length;
+        if (letterCount < 2) return;
+        setupHoverForTerm(term, firstCell, readingAreas, doc);
+      });
+    });
+  } catch(e) {
+    // CORS 등 에러는 조용히 무시
+  }
+}
+
+// 다양한 시점에서 실행 (DOM 로딩 대응)
+[200, 600, 1500, 3000].forEach(function(d) { setTimeout(setupVocabHover, d); });
+
+// DOM 변화 감지 (디바운스 300ms)
+try {
+  new MutationObserver(function() {
+    clearTimeout(parent.__vocabDebounce);
+    parent.__vocabDebounce = setTimeout(setupVocabHover, 300);
+  }).observe(parent.document.body, {childList: true, subtree: true});
+} catch(e) {}
+</script>' style="display:none;width:0;height:0;border:0;position:absolute;"></iframe>
 """, unsafe_allow_html=True)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -841,7 +1041,7 @@ def build_prompt(text: str, mode: str) -> str:
 - 명령어 / 파라미터 / 옵션이 등장하면 각각의 역할을 **표**로 재구성
 - 어려운 개념은 일상 비유나 구체적 예시로 풀기
 
-### 3️⃣ 인사이트
+### 3️⃣ 실무 인사이트
 - 실무에서 자주 마주치는 함정·실수·오해
 - 왜 이게 중요한가 (성능·비용·QoR·수율 등 실제 영향)
 
