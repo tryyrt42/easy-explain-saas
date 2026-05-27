@@ -69,16 +69,37 @@ st.markdown("""
     [data-testid="manage-app-button-container"],
     [data-testid*="ManageApp"],
     [data-testid*="manageApp"],
+    [data-testid*="ManageMenu"],
+    [data-testid*="manageMenu"],
     [class*="manage-app"],
     [class*="ManageApp"],
+    [class*="manageMenu"],
+    [class*="ManageMenu"],
+    [class*="appActions"],
+    [class*="AppActions"],
+    [class*="floatingMenu"],
     .stStatusWidget,
     [data-testid="stStatusWidget"],
     [data-testid="stBottomBlockContainer"],
+    [data-testid="stAppFooter"],
     iframe[title*="Manage"],
     iframe[title*="manage"],
+    iframe[src*="share.streamlit.io"],
+    button[title*="Manage"],
+    button[aria-label*="Manage"],
+    a[href*="share.streamlit.io"],
     [aria-label*="Manage app"] {
         display: none !important;
         visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+    
+    /* JS 주입용 보이지 않는 iframe 자체도 숨김 */
+    iframe[srcdoc*="hideManageApp"] {
+        display: none !important;
+        height: 0 !important;
+        width: 0 !important;
     }
     
     /* === 🚨 사이드바 무조건 보이게 === */
@@ -196,6 +217,87 @@ st.markdown("""
         border: none;
         border-top: 1px dashed rgba(168, 85, 247, 0.3);
     }
+</style>
+""", unsafe_allow_html=True)
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 🚫 Streamlit Cloud 'Manage app' 동적 버튼 강제 제거
+# CSS 셀렉터로 못 잡는 경우를 대비해 텍스트 매칭 + MutationObserver
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+import streamlit.components.v1 as components
+components.html("""
+<script>
+(function() {
+    function hideManageApp() {
+        try {
+            const doc = window.parent.document;
+            const allElements = doc.querySelectorAll('*');
+            
+            allElements.forEach(el => {
+                // leaf 요소만 검사 (자식이 텍스트만 있는 요소)
+                if (el.children.length > 0) return;
+                
+                const text = (el.textContent || '').trim();
+                // "Manage app" 텍스트를 가진 요소 발견
+                if (text === 'Manage app' || 
+                    text === '< Manage app' || 
+                    text === '◁ Manage app' ||
+                    (text.length < 30 && text.includes('Manage app'))) {
+                    
+                    // 클릭 가능한 부모(버튼/링크/컨테이너)까지 거슬러 올라가 숨김
+                    let target = el;
+                    for (let i = 0; i < 6 && target && target.tagName !== 'BODY'; i++) {
+                        target.style.display = 'none';
+                        target.style.visibility = 'hidden';
+                        target.style.opacity = '0';
+                        target.style.pointerEvents = 'none';
+                        // 버튼/링크면 거기서 멈춤
+                        if (target.tagName === 'BUTTON' || target.tagName === 'A') {
+                            break;
+                        }
+                        target = target.parentElement;
+                    }
+                }
+            });
+        } catch (e) {
+            // CORS 등 에러는 무시
+        }
+    }
+    
+    // 즉시 + 여러 시점에서 실행 (지연 로딩 대응)
+    hideManageApp();
+    [100, 300, 600, 1000, 2000, 3500, 5000].forEach(delay => {
+        setTimeout(hideManageApp, delay);
+    });
+    
+    // 5초마다 백그라운드 체크 (혹시 모를 재등장 대비)
+    setInterval(hideManageApp, 5000);
+    
+    // MutationObserver로 DOM 변화 즉시 감지
+    try {
+        const observer = new MutationObserver(hideManageApp);
+        observer.observe(window.parent.document.body, {
+            childList: true,
+            subtree: true
+        });
+    } catch (e) {
+        // observer 실패해도 setInterval로 커버됨
+    }
+})();
+</script>
+""", height=0)
+
+# components.html이 만드는 iframe이 1~2px 여백을 차지하지 않도록 추가 정리
+st.markdown("""
+<style>
+/* 위에서 주입한 components.html iframe 컨테이너 0px로 압축 */
+div[data-testid="stIFrame"]:has(iframe[height="0"]),
+div[data-testid="element-container"]:has(iframe[height="0"]) {
+    display: none !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -517,11 +619,13 @@ def build_prompt(text: str, mode: str) -> str:
 **🚫 절대 금지**
 `[S: I] [V: knew] [O: no one] [수식: in the place]` 같은 태그 분해, 5형식·8품사 분류 — 가독성 빵점. 사용 금지.
 
-**📝 각 선정 문장마다 이 형식 (콜론 구분)**
+**📝 각 선정 문장마다 다음 형식 (모든 라벨은 콜론으로 구분)**
 
 **원문:** 따옴표로 문장 그대로 인용 (가공/축약 금지)
 
-**해설:** 1타 강사가 옆에서 풀어주듯 자연스러운 한국어 산문으로. 한국어식 직역과 영어식 발상의 결정적 차이, 원어민이 왜 이 단어·어순·시제·태를 골랐는지, 비슷한 표현으로 바꾸면 어감이 어떻게 달라지는지, 문장이 풍기는 분위기·뉘앙스를 자연스럽게 녹여 써.
+**왜 이 문장을 골랐는가:** 한국인이 이 문장에서 흔히 놓치는 영어의 핵심 감각을 1~2줄로 미리 짚어주기.
+
+**친절한 해설:** 1타 강사가 옆에서 풀어주듯 자연스러운 한국어 산문으로. 한국어식 직역과 영어식 발상의 결정적 차이, 원어민이 왜 이 단어·어순·시제·태를 골랐는지, 비슷한 표현으로 바꾸면 어감이 어떻게 달라지는지, 문장이 풍기는 분위기·뉘앙스를 자연스럽게 녹여 써.
 
 > 톤 예시: "한국어로는 '아는 사람이 없었다'고 *없음*을 말하지만, 영어는 'I knew no one'으로 *내가 알았다, 0명을* 이라고 합니다. 동사가 아니라 목적어를 부정하는 거죠. 영어를 영어답게 쓰는 핵심 감각이에요."
 
