@@ -673,9 +673,11 @@ if st.session_state.get("user") is None:
             ),
         ]
         
-        for mode_name, img_path, mode_desc, emblem_svg in modes_preview:
+        for idx, (mode_name, img_path, mode_desc, emblem_svg) in enumerate(modes_preview):
+            # 🆕 첫 번째 섹션은 좌측 h1과 상단 정렬되도록 margin-top 0
+            margin_top = "0" if idx == 0 else "2rem"
             st.markdown(
-                f"<div style='display: flex; align-items: center; gap: 10px; margin-top: 2rem; margin-bottom: 0.3rem;'>"
+                f"<div style='display: flex; align-items: center; gap: 10px; margin-top: {margin_top}; margin-bottom: 0.3rem;'>"
                 f"{emblem_svg}"
                 f"<h3 style='color: #e2e8f0; font-size: 1.3rem; margin: 0;'>{mode_name}</h3>"
                 f"</div>"
