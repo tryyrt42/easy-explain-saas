@@ -492,7 +492,7 @@ if st.session_state.get("user") is None:
                         except Exception as e:
                             err_msg = str(e)
                             if "rate" in err_msg.lower() or "limit" in err_msg.lower():
-                                st.error("⏱️ 메일 발송 한도에 도달했습니다. **5~10분 후** 다시 시도해주세요.")
+                                st.error("메일 발송 한도에 도달했습니다. **5~10분 후** 다시 시도해주세요.")
                             else:
                                 st.error(f"⚠️ 전송 실패: {err_msg}")
             
