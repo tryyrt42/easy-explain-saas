@@ -335,14 +335,14 @@ def clear_file_for_user(email):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# ⚡ 파일 파싱 — @st.cache_data로 세션 간 캐싱 (같은 파일 재업로드 시 즉시 반환)
-# - max_entries: 메모리 보호용 (서버당 동시 캐시할 파일 수 제한)
-# - 첫 파싱은 어쩔 수 없이 느리지만, 두번째부터 즉시
+# 📖 파일 파싱 함수
+# 주의: @st.cache_data는 Render Free(512MB)에서 메모리 압박 유발해서 제거함
+# (큰 PDF 페이지 이미지를 직렬화하다 무한로딩)
+# 대신 session_state로 같은 세션 내 재파싱 방지 — 기존 동작 그대로
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-@st.cache_data(max_entries=8, show_spinner=False)
 def parse_pdf(pdf_bytes):
-    """PDF 파싱 → (page_images, page_texts) 튜플 반환. 같은 파일 두 번째부터 즉시."""
+    """PDF 파싱 → (page_images, page_texts) 튜플 반환"""
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     page_images = []
     page_texts = []
@@ -355,9 +355,8 @@ def parse_pdf(pdf_bytes):
     return page_images, page_texts
 
 
-@st.cache_data(max_entries=20, show_spinner=False)
 def parse_txt(txt_bytes):
-    """TXT 파싱 → page_texts 리스트 반환. 같은 파일 두 번째부터 즉시."""
+    """TXT 파싱 → page_texts 리스트 반환"""
     try:
         raw_text = txt_bytes.decode('utf-8')
     except Exception:
@@ -368,9 +367,8 @@ def parse_txt(txt_bytes):
     return [raw_text[i:i+chunk_size] for i in range(0, len(raw_text), chunk_size)]
 
 
-@st.cache_data(max_entries=20, show_spinner=False)
 def parse_docx(docx_bytes):
-    """DOCX 파싱 → page_texts 리스트 반환. 같은 파일 두 번째부터 즉시."""
+    """DOCX 파싱 → page_texts 리스트 반환"""
     doc_file = docx.Document(io.BytesIO(docx_bytes))
     raw_text = "\n".join([para.text for para in doc_file.paragraphs])
     chunk_size = 1500
@@ -815,7 +813,7 @@ with st.sidebar:
             "otp_sent", "pending_email", "otp_input",
             # Streamlit 위젯 키들
             "file_uploader_main", "mode_selector_main", "view_page_input",
-            "login_email",
+            "login_email", "input_mode_main", "pasted_text_main",
         ]
         for key in keys_to_clear:
             if key in st.session_state:
@@ -986,7 +984,7 @@ with st.expander("문서 & 해석 설정", expanded=True):
         file_ext = uploaded_file.name.split('.')[-1].lower()
         
         if st.session_state.get("file_id") != file_id:
-            with st.spinner("📖 문서 읽는 중... (같은 파일 두 번째부터는 즉시!)"):
+            with st.spinner("📖 문서 읽는 중..."):
                 if file_ext == "pdf":
                     pdf_bytes = uploaded_file.read()
                     page_images, page_texts = parse_pdf(pdf_bytes)
