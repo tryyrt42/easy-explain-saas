@@ -20,3 +20,14 @@ toolbarMode = "minimal"
 
 # 에러 상세 정보 숨김 (운영 환경용)
 showErrorDetails = false
+
+[server]
+# 🆕 큰 PDF 업로드 허용 (기본 200MB → 300MB로 명시)
+maxUploadSize = 300
+
+# 🆕 WebSocket 메시지 최대 크기 (파일 업로드 시 청크 단위 전송에 영향)
+maxMessageSize = 300
+
+# CORS 비활성 (Render 환경에서 권장)
+enableCORS = false
+enableXsrfProtection = false
