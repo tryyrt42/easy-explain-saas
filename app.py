@@ -333,6 +333,52 @@ def clear_file_for_user(email):
     cache = get_persistent_file_cache()
     cache.pop(email, None)
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ⚡ 파일 파싱 — @st.cache_data로 세션 간 캐싱 (같은 파일 재업로드 시 즉시 반환)
+# - max_entries: 메모리 보호용 (서버당 동시 캐시할 파일 수 제한)
+# - 첫 파싱은 어쩔 수 없이 느리지만, 두번째부터 즉시
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@st.cache_data(max_entries=8, show_spinner=False)
+def parse_pdf(pdf_bytes):
+    """PDF 파싱 → (page_images, page_texts) 튜플 반환. 같은 파일 두 번째부터 즉시."""
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    page_images = []
+    page_texts = []
+    for i in range(len(doc)):
+        page = doc[i]
+        pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
+        page_images.append(pix.tobytes("png"))
+        page_texts.append(page.get_text())
+    doc.close()
+    return page_images, page_texts
+
+
+@st.cache_data(max_entries=20, show_spinner=False)
+def parse_txt(txt_bytes):
+    """TXT 파싱 → page_texts 리스트 반환. 같은 파일 두 번째부터 즉시."""
+    try:
+        raw_text = txt_bytes.decode('utf-8')
+    except Exception:
+        raw_text = txt_bytes.decode('cp949', errors='ignore')
+    chunk_size = 1500
+    if not raw_text.strip():
+        return ["(내용이 없습니다)"]
+    return [raw_text[i:i+chunk_size] for i in range(0, len(raw_text), chunk_size)]
+
+
+@st.cache_data(max_entries=20, show_spinner=False)
+def parse_docx(docx_bytes):
+    """DOCX 파싱 → page_texts 리스트 반환. 같은 파일 두 번째부터 즉시."""
+    doc_file = docx.Document(io.BytesIO(docx_bytes))
+    raw_text = "\n".join([para.text for para in doc_file.paragraphs])
+    chunk_size = 1500
+    if not raw_text.strip():
+        return ["(내용이 없습니다)"]
+    return [raw_text[i:i+chunk_size] for i in range(0, len(raw_text), chunk_size)]
+
+
 # F5 새로고침 방어: 사용자 + 파일 데이터 모두 복구
 if st.session_state.get("user") is None and "logged_in_email" in st.query_params:
     saved_email = st.query_params["logged_in_email"]
@@ -940,32 +986,21 @@ with st.expander("문서 & 해석 설정", expanded=True):
         file_ext = uploaded_file.name.split('.')[-1].lower()
         
         if st.session_state.get("file_id") != file_id:
-            page_images, page_texts = [], []
-            with st.spinner("📖 문서 읽는 중..."):
+            with st.spinner("📖 문서 읽는 중... (같은 파일 두 번째부터는 즉시!)"):
                 if file_ext == "pdf":
                     pdf_bytes = uploaded_file.read()
-                    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-                    for i in range(len(doc)):
-                        page = doc[i]
-                        pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
-                        page_images.append(pix.tobytes("png"))
-                        page_texts.append(page.get_text())
-                    doc.close()
-                else:
-                    raw_text = ""
-                    if file_ext == "txt":
-                        raw_bytes = uploaded_file.read()
-                        try: raw_text = raw_bytes.decode('utf-8')
-                        except: raw_text = raw_bytes.decode('cp949', errors='ignore')
-                    elif file_ext == "docx":
-                        doc_file = docx.Document(io.BytesIO(uploaded_file.read()))
-                        raw_text = "\n".join([para.text for para in doc_file.paragraphs])
-                    chunk_size = 1500
-                    if not raw_text.strip(): 
-                        page_texts = ["(내용이 없습니다)"]
-                    else: 
-                        page_texts = [raw_text[i:i+chunk_size] for i in range(0, len(raw_text), chunk_size)]
+                    page_images, page_texts = parse_pdf(pdf_bytes)
+                elif file_ext == "txt":
+                    txt_bytes = uploaded_file.read()
+                    page_texts = parse_txt(txt_bytes)
                     page_images = [None] * len(page_texts)
+                elif file_ext == "docx":
+                    docx_bytes = uploaded_file.read()
+                    page_texts = parse_docx(docx_bytes)
+                    page_images = [None] * len(page_texts)
+                else:
+                    page_texts = ["(지원하지 않는 파일 형식)"]
+                    page_images = [None]
             
             st.session_state["file_id"] = file_id
             st.session_state["file_ext"] = file_ext
@@ -1299,7 +1334,7 @@ elif st.session_state["fullscreen_result"]:
     with fs_top[2]:
         st.markdown(
             f"<div style='margin-top: 32px; color: #94a3b8;'>"
-            f" <b>{selected_mode}</b>"
+            f"🎭 <b>{selected_mode}</b>"
             f"</div>", 
             unsafe_allow_html=True
         )
