@@ -394,7 +394,26 @@ with st.sidebar:
         show_pricing_modal()
 
     if st.button("로그아웃", use_container_width=True):
-        st.session_state["user"] = None
+        # 🧹 로그아웃 시 모든 세션 데이터 완전 정리
+        keys_to_clear = [
+            # 사용자
+            "user",
+            # 업로드된 파일 관련 데이터
+            "file_id", "file_ext", "page_images", "page_texts", "total_pages",
+            # 해석 캐시
+            "interpret_cache",
+            # UI 토글 상태
+            "include_next_page", "fullscreen_result", "fullscreen_pdf",
+            # 모드 선택
+            "selected_mode",
+            # Streamlit 위젯 키들 (이걸 안 지우면 다음 로그인 시 이전 파일/값이 그대로 남음)
+            "file_uploader_main", "mode_selector_main", "view_page_input",
+            "login_email",
+        ]
+        for key in keys_to_clear:
+            if key in st.session_state:
+                del st.session_state[key]
+        
         st.query_params.clear() 
         st.rerun()
 
