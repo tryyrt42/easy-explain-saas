@@ -102,6 +102,41 @@ st.markdown("""
         width: 0 !important;
     }
     
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    /* 🛡 1차 방어: 최대 specificity로 정확히 타격                   */
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    html body button[data-testid="manage-app-button"],
+    html body button[class^="_terminalButton_"],
+    html body button[class*="_terminalButton_"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: 0 !important;
+        position: absolute !important;
+        left: -99999px !important;
+        pointer-events: none !important;
+    }
+    
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    /* 🛡 2차 방어: 우측 하단을 직접 div로 덮음 (z-index 최대) */
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    #manage-app-blocker {
+        position: fixed !important;
+        bottom: 0 !important;
+        right: 0 !important;
+        width: 250px !important;
+        height: 65px !important;
+        background: #0f172a !important;
+        z-index: 2147483647 !important;
+        pointer-events: auto !important;
+        display: block !important;
+    }
+    
+    
     /* === 🚨 사이드바 무조건 보이게 === */
     [data-testid="stSidebar"] {
         display: block !important;
@@ -221,84 +256,28 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 🚫 Streamlit Cloud 'Manage app' 동적 버튼 강제 제거
-# CSS 셀렉터로 못 잡는 경우를 대비해 텍스트 매칭 + MutationObserver
+# 🚫 Streamlit Cloud 'Manage app' 버튼 강제 제거
+# 핵심: iframe srcdoc은 부모와 same-origin이라 parent.document 접근 가능
+# (components.html은 streamlitusercontent.com에서 서빙되어 cross-origin 실패)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-import streamlit.components.v1 as components
-components.html("""
-<script>
-(function() {
-    function hideManageApp() {
-        try {
-            const doc = window.parent.document;
-            const allElements = doc.querySelectorAll('*');
-            
-            allElements.forEach(el => {
-                // leaf 요소만 검사 (자식이 텍스트만 있는 요소)
-                if (el.children.length > 0) return;
-                
-                const text = (el.textContent || '').trim();
-                // "Manage app" 텍스트를 가진 요소 발견
-                if (text === 'Manage app' || 
-                    text === '< Manage app' || 
-                    text === '◁ Manage app' ||
-                    (text.length < 30 && text.includes('Manage app'))) {
-                    
-                    // 클릭 가능한 부모(버튼/링크/컨테이너)까지 거슬러 올라가 숨김
-                    let target = el;
-                    for (let i = 0; i < 6 && target && target.tagName !== 'BODY'; i++) {
-                        target.style.display = 'none';
-                        target.style.visibility = 'hidden';
-                        target.style.opacity = '0';
-                        target.style.pointerEvents = 'none';
-                        // 버튼/링크면 거기서 멈춤
-                        if (target.tagName === 'BUTTON' || target.tagName === 'A') {
-                            break;
-                        }
-                        target = target.parentElement;
-                    }
-                }
-            });
-        } catch (e) {
-            // CORS 등 에러는 무시
-        }
-    }
-    
-    // 즉시 + 여러 시점에서 실행 (지연 로딩 대응)
-    hideManageApp();
-    [100, 300, 600, 1000, 2000, 3500, 5000].forEach(delay => {
-        setTimeout(hideManageApp, delay);
-    });
-    
-    // 5초마다 백그라운드 체크 (혹시 모를 재등장 대비)
-    setInterval(hideManageApp, 5000);
-    
-    // MutationObserver로 DOM 변화 즉시 감지
-    try {
-        const observer = new MutationObserver(hideManageApp);
-        observer.observe(window.parent.document.body, {
-            childList: true,
-            subtree: true
-        });
-    } catch (e) {
-        // observer 실패해도 setInterval로 커버됨
-    }
-})();
-</script>
-""", height=0)
-
-# components.html이 만드는 iframe이 1~2px 여백을 차지하지 않도록 추가 정리
 st.markdown("""
-<style>
-/* 위에서 주입한 components.html iframe 컨테이너 0px로 압축 */
-div[data-testid="stIFrame"]:has(iframe[height="0"]),
-div[data-testid="element-container"]:has(iframe[height="0"]) {
-    display: none !important;
-    height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
+<!-- 1️⃣ 시각적 차단용 오버레이 div (z-index 최대) -->
+<div id="manage-app-blocker"></div>
+
+<!-- 2️⃣ same-origin iframe으로 부모 DOM에서 Manage app 버튼 제거 -->
+<iframe srcdoc='<script>
+function killManageApp() {
+  try {
+    var doc = parent.document;
+    doc.querySelectorAll("[data-testid=manage-app-button]").forEach(function(el){ el.remove(); });
+    doc.querySelectorAll("button[class*=_terminalButton_]").forEach(function(el){ el.remove(); });
+  } catch(e) {}
 }
-</style>
+killManageApp();
+[100,300,600,1000,2000,3500,5000].forEach(function(d){ setTimeout(killManageApp, d); });
+setInterval(killManageApp, 1000);
+try { new MutationObserver(killManageApp).observe(parent.document.body, {childList:true, subtree:true}); } catch(e){}
+</script>' style="display:none;width:0;height:0;border:0;position:absolute;"></iframe>
 """, unsafe_allow_html=True)
 
 # ============================================================
