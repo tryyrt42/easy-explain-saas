@@ -467,7 +467,7 @@ if st.session_state.get("user") is None:
                 )
                 st.markdown(
                     "<p style='font-size: 0.8rem; color: #94a3b8; text-align: center; margin-top: 8px;'>"
-                    "📧 입력한 이메일로 인증 코드가 발송됩니다"
+                    "입력한 이메일로 인증 코드가 발송됩니다"
                     "</p>", 
                     unsafe_allow_html=True
                 )
@@ -501,14 +501,14 @@ if st.session_state.get("user") is None:
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             else:
                 st.info(
-                    f"📧 **{st.session_state['pending_email']}** 으로 "
+                    f"**{st.session_state['pending_email']}** 으로 "
                     f"인증 코드를 보냈습니다.\n\n"
                     f"⚠️ 메일 안의 **링크는 누르지 마시고**, "
                     f"**숫자 인증 코드**만 아래에 입력해주세요. *(스팸함도 확인)*"
                 )
                 otp_input = st.text_input(
                     "인증 코드", 
-                    placeholder="000000",
+                    placeholder="00000000",
                     max_chars=8,
                     key="otp_input"
                 )
@@ -519,7 +519,7 @@ if st.session_state.get("user") is None:
                 )
                 
                 # 🔄 재전송 (전체 너비, 보조 액션)
-                if st.button("🔄 인증 코드 재전송", use_container_width=True, key="resend_otp"):
+                if st.button("인증 코드 재전송", use_container_width=True, key="resend_otp"):
                     try:
                         with st.spinner("재전송 중..."):
                             supabase.auth.sign_in_with_otp({
@@ -535,7 +535,7 @@ if st.session_state.get("user") is None:
                             st.error(f"⚠️ {err_msg}")
                 
                 # ⬅️ 이메일 다시 입력 (전체 너비, escape 액션)
-                if st.button("⬅️ 다른 이메일로 다시 시작", use_container_width=True, key="back_to_email"):
+                if st.button("다른 이메일로 다시 시작", use_container_width=True, key="back_to_email"):
                     st.session_state["otp_sent"] = False
                     st.session_state["pending_email"] = ""
                     st.rerun()
