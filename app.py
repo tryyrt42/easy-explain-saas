@@ -7,7 +7,10 @@
 """
 import docx  
 import io    
+import os
 import re
+import tempfile
+import hashlib
 import streamlit as st
 import fitz  
 import google.generativeai as genai
@@ -305,7 +308,7 @@ MODEL_NAME = "gemini-3.1-flash-lite"
 @st.cache_resource
 def get_persistent_file_cache():
     """이메일별 파일 데이터 영속 저장소. 컨테이너 재시작 시까지 유지."""
-    return {}  # {email: {file_id, file_ext, page_images, page_texts, total_pages, interpret_cache}}
+    return {}  # {email: {file_id, file_ext, pdf_path, page_texts, total_pages, interpret_cache}}
 
 def cache_file_for_user(email, **data):
     """파일 데이터를 외부 캐시에 저장"""
@@ -335,24 +338,69 @@ def clear_file_for_user(email):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 📖 파일 파싱 함수
-# 주의: @st.cache_data는 Render Free(512MB)에서 메모리 압박 유발해서 제거함
-# (큰 PDF 페이지 이미지를 직렬화하다 무한로딩)
-# 대신 session_state로 같은 세션 내 재파싱 방지 — 기존 동작 그대로
+# 📖 파일 파싱 함수 — Lazy PDF 렌더링 (대용량 PDF 메모리 안전)
+# - parse_pdf_lazy: PDF를 디스크 임시파일로 저장 + 텍스트만 추출 (빠름)
+# - render_pdf_page_image: 보는 페이지만 즉석 렌더링 (메모리 안전)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def parse_pdf(pdf_bytes):
-    """PDF 파싱 → (page_images, page_texts) 튜플 반환"""
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    page_images = []
-    page_texts = []
-    for i in range(len(doc)):
-        page = doc[i]
-        pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
-        page_images.append(pix.tobytes("png"))
-        page_texts.append(page.get_text())
+def get_pdf_temp_path(file_id):
+    """file_id 기반 결정적 경로 → 같은 파일은 같은 경로 사용"""
+    safe_id = hashlib.md5(file_id.encode()).hexdigest()[:16]
+    return os.path.join(tempfile.gettempdir(), f"easyeasy_{safe_id}.pdf")
+
+
+def parse_pdf_lazy(pdf_bytes, file_id):
+    """PDF를 디스크에 저장 + 텍스트만 추출 (이미지 렌더링은 보는 페이지만 나중에)"""
+    pdf_path = get_pdf_temp_path(file_id)
+    # 디스크에 저장 (재업로드 시 같은 경로에 덮어쓰기)
+    with open(pdf_path, 'wb') as f:
+        f.write(pdf_bytes)
+    # 텍스트 추출 (빠름, 메모리 적음)
+    doc = fitz.open(pdf_path)
+    page_texts = [page.get_text() for page in doc]
+    total_pages = len(doc)
     doc.close()
-    return page_images, page_texts
+    return pdf_path, page_texts, total_pages
+
+
+def render_pdf_page_image(pdf_path, page_index, dpi=1.2):
+    """PDF 한 페이지만 즉석 렌더링. JPEG로 압축해 메모리 절약."""
+    if not pdf_path or not os.path.exists(pdf_path):
+        return None
+    try:
+        doc = fitz.open(pdf_path)
+        if page_index < 0 or page_index >= len(doc):
+            doc.close()
+            return None
+        page = doc[page_index]
+        pix = page.get_pixmap(matrix=fitz.Matrix(dpi, dpi))
+        # JPEG quality 85 — 화면용으로 충분, PNG보다 60-70% 작음
+        img_bytes = pix.tobytes("jpeg", jpg_quality=85)
+        doc.close()
+        return img_bytes
+    except Exception:
+        return None
+
+
+def get_or_render_page(pdf_path, page_index, dpi=1.2):
+    """세션 캐시 활용 (최근 본 3페이지만 유지) — 재렌더링 방지"""
+    cache_key = "_pdf_page_cache"
+    cache = st.session_state.setdefault(cache_key, {})
+    full_key = f"{pdf_path}::{page_index}"
+    
+    if full_key in cache:
+        return cache[full_key]
+    
+    img = render_pdf_page_image(pdf_path, page_index, dpi)
+    if img is None:
+        return None
+    
+    # LRU: 3페이지 초과 시 가장 오래된 것 제거
+    if len(cache) >= 3:
+        oldest_key = next(iter(cache))
+        del cache[oldest_key]
+    cache[full_key] = img
+    return img
 
 
 def parse_txt(txt_bytes):
@@ -802,7 +850,8 @@ with st.sidebar:
             # 사용자
             "user",
             # 업로드된 파일 관련 데이터
-            "file_id", "file_ext", "page_images", "page_texts", "total_pages",
+            "file_id", "file_ext", "pdf_path", "page_texts", "total_pages",
+            "_pdf_page_cache",
             # 해석 캐시
             "interpret_cache",
             # UI 토글 상태
@@ -987,35 +1036,41 @@ with st.expander("문서 & 해석 설정", expanded=True):
             with st.spinner("📖 문서 읽는 중..."):
                 if file_ext == "pdf":
                     pdf_bytes = uploaded_file.read()
-                    page_images, page_texts = parse_pdf(pdf_bytes)
+                    pdf_path, page_texts, total_pages_loaded = parse_pdf_lazy(pdf_bytes, file_id)
                 elif file_ext == "txt":
                     txt_bytes = uploaded_file.read()
                     page_texts = parse_txt(txt_bytes)
-                    page_images = [None] * len(page_texts)
+                    pdf_path = None
+                    total_pages_loaded = len(page_texts)
                 elif file_ext == "docx":
                     docx_bytes = uploaded_file.read()
                     page_texts = parse_docx(docx_bytes)
-                    page_images = [None] * len(page_texts)
+                    pdf_path = None
+                    total_pages_loaded = len(page_texts)
                 else:
                     page_texts = ["(지원하지 않는 파일 형식)"]
-                    page_images = [None]
+                    pdf_path = None
+                    total_pages_loaded = 1
             
             st.session_state["file_id"] = file_id
             st.session_state["file_ext"] = file_ext
-            st.session_state["page_images"] = page_images
+            st.session_state["pdf_path"] = pdf_path
             st.session_state["page_texts"] = page_texts
-            st.session_state["total_pages"] = len(page_texts)
+            st.session_state["total_pages"] = total_pages_loaded
+            # 새 파일 업로드 시 이전 페이지 캐시 초기화
+            st.session_state["_pdf_page_cache"] = {}
             
             # 🆕 외부 영속 캐시에도 저장 → F5 새로고침 시 복구 가능
+            # ⚠️ pdf_path만 저장 (페이지 이미지는 저장 안 함 — 메모리 절약)
             user_email = st.session_state.get("user", {}).get("email", "")
             cache_file_for_user(
                 user_email,
                 file_id=file_id,
                 file_ext=file_ext,
-                page_images=page_images,
+                pdf_path=pdf_path,
                 page_texts=page_texts,
-                total_pages=len(page_texts),
-                interpret_cache=st.session_state["interpret_cache"],  # reference 공유
+                total_pages=total_pages_loaded,
+                interpret_cache=st.session_state["interpret_cache"],
             )
         
         total_pages_show = st.session_state.get("total_pages", 1)
@@ -1031,7 +1086,7 @@ if uploaded_file is None and "file_id" not in st.session_state:
     st.stop()
 
 total_pages = st.session_state.get("total_pages", 1)
-page_images = st.session_state.get("page_images", [])
+pdf_path = st.session_state.get("pdf_path")
 page_texts = st.session_state.get("page_texts", [])
 file_id = st.session_state.get("file_id", "")
 file_ext = st.session_state.get("file_ext", "pdf")
@@ -1184,18 +1239,23 @@ def build_vocab_hover_css(terms):
     return '<style>' + '\n'.join(rules) + '</style>'
 
 
-def render_pages_in_container(pages_to_show, page_images, page_texts, total_pages, vocab_terms=None, container_height=1200):
-    """페이지(들)를 컨테이너 안에 표시. PDF=이미지, TXT/DOCX=가독성 좋은 HTML
+def render_pages_in_container(pages_to_show, pdf_path, page_texts, total_pages, vocab_terms=None, container_height=1200):
+    """페이지(들)를 컨테이너 안에 표시.
+    PDF=pdf_path에서 즉석 렌더링 (lazy), TXT/DOCX=텍스트 HTML
     vocab_terms: 영단어 학습 모드 시 원문에서 하이라이트할 단어 리스트"""
     with st.container(height=container_height, border=True):
         for idx, pg in enumerate(pages_to_show):
-            # PDF (이미지 있음)
-            if page_images and page_images[pg - 1] is not None:
-                st.image(
-                    page_images[pg - 1], 
-                    caption=f"━━━ 페이지 {pg} / {total_pages} ━━━", 
-                    use_container_width=True
-                )
+            # 🆕 PDF 모드: 디스크에서 해당 페이지만 즉석 렌더링
+            if pdf_path and os.path.exists(pdf_path):
+                img_bytes = get_or_render_page(pdf_path, pg - 1)
+                if img_bytes:
+                    st.image(
+                        img_bytes,
+                        caption=f"━━━ 페이지 {pg} / {total_pages} ━━━",
+                        use_container_width=True
+                    )
+                else:
+                    st.warning(f"⚠️ 페이지 {pg} 렌더링 실패")
             # TXT/DOCX (텍스트만) — HTML로 가독성 향상
             elif page_texts:
                 text_content = page_texts[pg - 1] or ""
@@ -1307,7 +1367,7 @@ if st.session_state["fullscreen_pdf"]:
     pages_to_show = [view_page]
     if include_next:
         pages_to_show.append(view_page + 1)
-    render_pages_in_container(pages_to_show, page_images, page_texts, total_pages, container_height=1200)
+    render_pages_in_container(pages_to_show, pdf_path, page_texts, total_pages, container_height=1200)
 
 elif st.session_state["fullscreen_result"]:
     fs_top = st.columns([2, 2, 4, 2])
@@ -1436,7 +1496,7 @@ else:
                 response_processed = response_raw
         
         render_pages_in_container(
-            pages_to_show, page_images, page_texts, total_pages, 
+            pages_to_show, pdf_path, page_texts, total_pages, 
             vocab_terms=vocab_terms, container_height=1200
         )
     
