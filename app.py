@@ -1299,7 +1299,7 @@ elif st.session_state["fullscreen_result"]:
     with fs_top[2]:
         st.markdown(
             f"<div style='margin-top: 32px; color: #94a3b8;'>"
-            f"🎭 <b>{selected_mode}</b>"
+            f" <b>{selected_mode}</b>"
             f"</div>", 
             unsafe_allow_html=True
         )
