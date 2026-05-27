@@ -467,7 +467,7 @@ if st.session_state.get("user") is None:
                 )
                 st.markdown(
                     "<p style='font-size: 0.8rem; color: #94a3b8; text-align: center; margin-top: 8px;'>"
-                    "입력한 이메일로 6자리 인증 코드가 발송됩니다"
+                    "📧 입력한 이메일로 6자리 인증 코드가 발송됩니다"
                     "</p>", 
                     unsafe_allow_html=True
                 )
@@ -492,7 +492,7 @@ if st.session_state.get("user") is None:
                         except Exception as e:
                             err_msg = str(e)
                             if "rate" in err_msg.lower() or "limit" in err_msg.lower():
-                                st.error("너무 자주 요청하셨어요. 잠시 후 다시 시도해주세요.")
+                                st.error("⏱️ 메일 발송 한도에 도달했습니다. **5~10분 후** 다시 시도해주세요.")
                             else:
                                 st.error(f"⚠️ 전송 실패: {err_msg}")
             
@@ -530,7 +530,7 @@ if st.session_state.get("user") is None:
                     except Exception as e:
                         err_msg = str(e)
                         if "rate" in err_msg.lower() or "limit" in err_msg.lower():
-                            st.error("⏱️ 너무 자주 요청하셨어요. 잠시 후 다시 시도해주세요.")
+                            st.error("⏱️ 메일 발송 한도에 도달했습니다. **5~10분 후** 다시 시도해주세요.")
                         else:
                             st.error(f"⚠️ {err_msg}")
                 
