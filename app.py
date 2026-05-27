@@ -467,7 +467,7 @@ if st.session_state.get("user") is None:
                 )
                 st.markdown(
                     "<p style='font-size: 0.8rem; color: #94a3b8; text-align: center; margin-top: 8px;'>"
-                    "📧 입력한 이메일로 6자리 인증 코드가 발송됩니다"
+                    "📧 입력한 이메일로 인증 코드가 발송됩니다"
                     "</p>", 
                     unsafe_allow_html=True
                 )
@@ -492,7 +492,7 @@ if st.session_state.get("user") is None:
                         except Exception as e:
                             err_msg = str(e)
                             if "rate" in err_msg.lower() or "limit" in err_msg.lower():
-                                st.error("메일 발송 한도에 도달했습니다. **5~10분 후** 다시 시도해주세요.")
+                                st.error("⏱️ 메일 발송 한도에 도달했습니다. **5~10분 후** 다시 시도해주세요.")
                             else:
                                 st.error(f"⚠️ 전송 실패: {err_msg}")
             
@@ -502,14 +502,14 @@ if st.session_state.get("user") is None:
             else:
                 st.info(
                     f"📧 **{st.session_state['pending_email']}** 으로 "
-                    f"6자리 인증 코드를 보냈습니다.\n\n"
+                    f"인증 코드를 보냈습니다.\n\n"
                     f"⚠️ 메일 안의 **링크는 누르지 마시고**, "
-                    f"**숫자 6자리 코드**만 아래에 입력해주세요. *(스팸함도 확인)*"
+                    f"**숫자 인증 코드**만 아래에 입력해주세요. *(스팸함도 확인)*"
                 )
                 otp_input = st.text_input(
-                    "6자리 인증 코드", 
+                    "인증 코드", 
                     placeholder="000000",
-                    max_chars=6,
+                    max_chars=8,
                     key="otp_input"
                 )
                 verify_btn = st.button(
@@ -541,8 +541,8 @@ if st.session_state.get("user") is None:
                     st.rerun()
                 
                 if verify_btn:
-                    if not otp_input or len(otp_input.strip()) != 6:
-                        st.error("⚠️ 6자리 코드를 정확히 입력해주세요.")
+                    if not otp_input or not (6 <= len(otp_input.strip()) <= 8):
+                        st.error("⚠️ 인증 코드를 정확히 입력해주세요.")
                     else:
                         try:
                             with st.spinner("🔐 인증 중..."):
