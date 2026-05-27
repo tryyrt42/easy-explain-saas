@@ -467,7 +467,7 @@ if st.session_state.get("user") is None:
                 )
                 st.markdown(
                     "<p style='font-size: 0.8rem; color: #94a3b8; text-align: center; margin-top: 8px;'>"
-                    "입력한 이메일로 6자리 인증 코드가 발송됩니다"
+                    "📧 입력한 이메일로 6자리 인증 코드가 발송됩니다"
                     "</p>", 
                     unsafe_allow_html=True
                 )
@@ -503,7 +503,8 @@ if st.session_state.get("user") is None:
                 st.info(
                     f"📧 **{st.session_state['pending_email']}** 으로 "
                     f"6자리 인증 코드를 보냈습니다.\n\n"
-                    f"메일을 확인하고 코드를 입력해주세요. *(스팸함도 확인)*"
+                    f"⚠️ 메일 안의 **링크는 누르지 마시고**, "
+                    f"**숫자 6자리 코드**만 아래에 입력해주세요. *(스팸함도 확인)*"
                 )
                 otp_input = st.text_input(
                     "6자리 인증 코드", 
@@ -517,27 +518,27 @@ if st.session_state.get("user") is None:
                     use_container_width=True
                 )
                 
-                col_resend, col_back = st.columns(2)
-                with col_resend:
-                    if st.button("🔄 코드 재전송", use_container_width=True):
-                        try:
-                            with st.spinner("재전송 중..."):
-                                supabase.auth.sign_in_with_otp({
-                                    "email": st.session_state["pending_email"],
-                                    "options": {"should_create_user": True}
-                                })
-                            st.success("✅ 재전송 완료")
-                        except Exception as e:
-                            err_msg = str(e)
-                            if "rate" in err_msg.lower() or "limit" in err_msg.lower():
-                                st.error("⏱️ 잠시 후 다시 시도해주세요.")
-                            else:
-                                st.error(f"⚠️ {err_msg}")
-                with col_back:
-                    if st.button("⬅️ 이메일 다시 입력", use_container_width=True):
-                        st.session_state["otp_sent"] = False
-                        st.session_state["pending_email"] = ""
-                        st.rerun()
+                # 🔄 재전송 (전체 너비, 보조 액션)
+                if st.button("🔄 인증 코드 재전송", use_container_width=True, key="resend_otp"):
+                    try:
+                        with st.spinner("재전송 중..."):
+                            supabase.auth.sign_in_with_otp({
+                                "email": st.session_state["pending_email"],
+                                "options": {"should_create_user": True}
+                            })
+                        st.success("✅ 재전송 완료. 메일을 다시 확인해주세요.")
+                    except Exception as e:
+                        err_msg = str(e)
+                        if "rate" in err_msg.lower() or "limit" in err_msg.lower():
+                            st.error("⏱️ 너무 자주 요청하셨어요. 잠시 후 다시 시도해주세요.")
+                        else:
+                            st.error(f"⚠️ {err_msg}")
+                
+                # ⬅️ 이메일 다시 입력 (전체 너비, escape 액션)
+                if st.button("⬅️ 다른 이메일로 다시 시작", use_container_width=True, key="back_to_email"):
+                    st.session_state["otp_sent"] = False
+                    st.session_state["pending_email"] = ""
+                    st.rerun()
                 
                 if verify_btn:
                     if not otp_input or len(otp_input.strip()) != 6:
