@@ -438,7 +438,28 @@ if st.session_state.get("user") is None:
     
     with col_left:
         st.markdown("<h1 style='font-size: 3.2rem; line-height: 1.2;'>어려운 기술 문서,<br>이제 가장 쉽게 읽으세요.</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #f8fafc; font-size: 1.1rem; margin-top: 1.5rem; margin-bottom: 2.5rem;'>복잡한 영문 매뉴얼, 번역기 돌리며 고생하지 마세요. AI가 핵심만 짚어 가장 이해하기 쉬운 한글로 설명해 드립니다.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #f8fafc; font-size: 1.1rem; margin-top: 1.5rem; margin-bottom: 1.2rem;'>복잡한 영문 매뉴얼, 번역기 돌리며 고생하지 마세요. AI가 핵심만 짚어 가장 이해하기 쉬운 한글로 설명해 드립니다.</p>", unsafe_allow_html=True)
+        
+        # 🆕 4가지 모드 뱃지
+        st.markdown("""
+        <p style='color: #a78bfa; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.05em; margin-bottom: 0.7rem;'>
+            ✨ 4가지 해석 모드 지원
+        </p>
+        <div style='display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 2rem;'>
+            <span style='background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.4); color: #c7d2fe; padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 500;'>
+                👨‍🏫 1타 강사 해설
+            </span>
+            <span style='background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); color: #e9d5ff; padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 500;'>
+                💡 비유 모드
+            </span>
+            <span style='background: rgba(236, 72, 153, 0.15); border: 1px solid rgba(236, 72, 153, 0.4); color: #fbcfe8; padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 500;'>
+                🎯 촌철살인 동네형
+            </span>
+            <span style='background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.4); color: #bbf7d0; padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 500;'>
+                📖 원서 독해 & 영단어
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
         
         with st.container(border=True):
             st.markdown("<h3 style='text-align: center; font-weight: 700;'>문서 해석 시작하기</h3>", unsafe_allow_html=True)
@@ -582,10 +603,30 @@ if st.session_state.get("user") is None:
                                 st.error(f"⚠️ 인증 실패: {err_msg}")
 
     with col_right:
-        try:
-            st.image("result_preview.png", use_container_width=True, output_format="PNG")
-        except:
-            st.info("💡 여기에 결과물 스샷(result_preview.png)이 큼직하게 표시됩니다.")
+        # 🆕 4가지 모드 스크린샷 수직 배치
+        modes_preview = [
+            ("👨‍🏫 1타 강사 해설 모드", "assets/mode_instructor.png", 
+             "강의실에서 듣는 듯 명쾌한 해설. 개념과 원리를 차근차근 풀어줍니다."),
+            ("💡 비유 모드", "assets/mode_analogy.png", 
+             "어려운 개념을 일상 비유로 직관적으로 이해. 의사·요리사·운전 등 친숙한 비유 활용."),
+            ("🎯 촌철살인 동네형 모드", "assets/mode_brother.png", 
+             "동네 형이 풀어주듯 핵심만 콕콕. 군더더기 없이 본질만 짚어줍니다."),
+            ("📖 원서 독해 & 영단어 학습 모드", "assets/mode_english.png", 
+             "원서·논문을 읽으며 핵심 영단어/숙어/구문까지 한 번에 학습."),
+        ]
+        
+        for mode_name, img_path, mode_desc in modes_preview:
+            st.markdown(
+                f"<h3 style='color: #e2e8f0; font-size: 1.3rem; margin-top: 2rem; margin-bottom: 0.3rem;'>"
+                f"{mode_name}</h3>"
+                f"<p style='color: #94a3b8; font-size: 0.95rem; margin-bottom: 1rem;'>{mode_desc}</p>",
+                unsafe_allow_html=True
+            )
+            try:
+                st.image(img_path, use_container_width=True, output_format="PNG")
+            except Exception:
+                st.info(f"💡 `{img_path}` 파일이 필요합니다.")
+            st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
             
     st.stop() 
 
