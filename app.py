@@ -208,11 +208,51 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 MODEL_NAME = "gemini-3.1-flash-lite" 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 💾 외부 영속 캐시 (F5 새로고침에도 살아남음)
+# - @st.cache_resource는 컨테이너 라이프타임 동안 같은 dict 인스턴스 반환
+# - 세션 state가 날아가도 이 dict는 유지됨
+# - 로그아웃 시에만 명시적으로 비움
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@st.cache_resource
+def get_persistent_file_cache():
+    """이메일별 파일 데이터 영속 저장소. 컨테이너 재시작 시까지 유지."""
+    return {}  # {email: {file_id, file_ext, page_images, page_texts, total_pages, interpret_cache}}
+
+def cache_file_for_user(email, **data):
+    """파일 데이터를 외부 캐시에 저장"""
+    if not email:
+        return
+    cache = get_persistent_file_cache()
+    cache[email] = data
+
+def restore_file_for_user(email):
+    """외부 캐시에서 파일 데이터 복구. 성공 시 True"""
+    if not email:
+        return False
+    cache = get_persistent_file_cache()
+    if email not in cache:
+        return False
+    data = cache[email]
+    for key, value in data.items():
+        st.session_state[key] = value
+    return True
+
+def clear_file_for_user(email):
+    """외부 캐시에서 특정 사용자 데이터 삭제 (로그아웃 시)"""
+    if not email:
+        return
+    cache = get_persistent_file_cache()
+    cache.pop(email, None)
+
+# F5 새로고침 방어: 사용자 + 파일 데이터 모두 복구
 if st.session_state.get("user") is None and "logged_in_email" in st.query_params:
     saved_email = st.query_params["logged_in_email"]
     response = supabase.table("users").select("*").eq("email", saved_email).execute()
     if len(response.data) > 0:
         st.session_state["user"] = response.data[0]
+        # 🆕 외부 캐시에서 파일 데이터 복구 (있으면)
+        restore_file_for_user(saved_email)
     else:
         st.query_params.clear()
 
@@ -394,7 +434,12 @@ with st.sidebar:
         show_pricing_modal()
 
     if st.button("로그아웃", use_container_width=True):
-        # 🧹 로그아웃 시 모든 세션 데이터 완전 정리
+        # 🧹 로그아웃 시 모든 세션 데이터 + 외부 캐시 완전 정리
+        user_email = st.session_state.get("user", {}).get("email", "")
+        
+        # 🆕 외부 영속 캐시에서도 삭제 (F5와 구분되는 핵심!)
+        clear_file_for_user(user_email)
+        
         keys_to_clear = [
             # 사용자
             "user",
@@ -406,7 +451,7 @@ with st.sidebar:
             "include_next_page", "fullscreen_result", "fullscreen_pdf",
             # 모드 선택
             "selected_mode",
-            # Streamlit 위젯 키들 (이걸 안 지우면 다음 로그인 시 이전 파일/값이 그대로 남음)
+            # Streamlit 위젯 키들
             "file_uploader_main", "mode_selector_main", "view_page_input",
             "login_email",
         ]
@@ -587,9 +632,25 @@ with st.expander("문서 & 해석 설정", expanded=True):
             st.session_state["page_images"] = page_images
             st.session_state["page_texts"] = page_texts
             st.session_state["total_pages"] = len(page_texts)
+            
+            # 🆕 외부 영속 캐시에도 저장 → F5 새로고침 시 복구 가능
+            user_email = st.session_state.get("user", {}).get("email", "")
+            cache_file_for_user(
+                user_email,
+                file_id=file_id,
+                file_ext=file_ext,
+                page_images=page_images,
+                page_texts=page_texts,
+                total_pages=len(page_texts),
+                interpret_cache=st.session_state["interpret_cache"],  # reference 공유
+            )
         
         total_pages_show = st.session_state.get("total_pages", 1)
         st.success(f"✅ 총 {total_pages_show} 페이지 로드 완료")
+    elif "file_id" in st.session_state:
+        # 🆕 F5 후: 업로더는 비어있지만 캐시에 파일 데이터가 있는 경우
+        total_pages_show = st.session_state.get("total_pages", 1)
+        st.success(f"✅ 총 {total_pages_show} 페이지 로드됨 (이전 세션 복구)")
     else:
         st.info("👆 좌측에 문서를 업로드하면 툴이 시작됩니다.")
 
