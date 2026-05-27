@@ -122,19 +122,9 @@ st.markdown("""
     }
     
     /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-    /* 🛡 2차 방어: 우측 하단을 직접 div로 덮음 (z-index 최대) */
+    /* ⚠️ Manage app 버튼은 Streamlit Cloud 외부 iframe 소속이라
+       앱 코드로 못 막음. 호스팅 이전 시 자동 해결.                */
     /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-    #manage-app-blocker {
-        position: fixed !important;
-        bottom: 0 !important;
-        right: 0 !important;
-        width: 250px !important;
-        height: 65px !important;
-        background: #0f172a !important;
-        z-index: 2147483647 !important;
-        pointer-events: auto !important;
-        display: block !important;
-    }
     
     
     /* === 🚨 사이드바 무조건 보이게 === */
@@ -256,29 +246,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 🚫 Streamlit Cloud 'Manage app' 버튼 강제 제거
-# 핵심: iframe srcdoc은 부모와 same-origin이라 parent.document 접근 가능
-# (components.html은 streamlitusercontent.com에서 서빙되어 cross-origin 실패)
+# ⚠️ Manage app 버튼: Streamlit Cloud의 외부 iframe 영역이라 
+# 앱 코드(CSS/JS)로 막을 수 없음. Render/Railway 등 다른 호스팅으로
+# 이전 시 자동 해결됨. 우리 CSS는 일부 변형 케이스만 보호.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-st.markdown("""
-<!-- 1️⃣ 시각적 차단용 오버레이 div (z-index 최대) -->
-<div id="manage-app-blocker"></div>
-
-<!-- 2️⃣ same-origin iframe으로 부모 DOM에서 Manage app 버튼 제거 -->
-<iframe srcdoc='<script>
-function killManageApp() {
-  try {
-    var doc = parent.document;
-    doc.querySelectorAll("[data-testid=manage-app-button]").forEach(function(el){ el.remove(); });
-    doc.querySelectorAll("button[class*=_terminalButton_]").forEach(function(el){ el.remove(); });
-  } catch(e) {}
-}
-killManageApp();
-[100,300,600,1000,2000,3500,5000].forEach(function(d){ setTimeout(killManageApp, d); });
-setInterval(killManageApp, 1000);
-try { new MutationObserver(killManageApp).observe(parent.document.body, {childList:true, subtree:true}); } catch(e){}
-</script>' style="display:none;width:0;height:0;border:0;position:absolute;"></iframe>
-""", unsafe_allow_html=True)
 
 # ============================================================
 # 🔒 2. Supabase 연결 및 F5 새로고침 방어 로직
@@ -472,20 +443,142 @@ if st.session_state.get("user") is None:
         with st.container(border=True):
             st.markdown("<h3 style='text-align: center; font-weight: 700;'>문서 해석 시작하기</h3>", unsafe_allow_html=True)
             st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
-            email_input = st.text_input("이메일 주소", placeholder="example@email.com", label_visibility="collapsed")
-            login_btn = st.button("✨ 이메일로 간편하게 시작하기", type="primary", use_container_width=True)
             
-            if login_btn and email_input:
-                response = supabase.table("users").select("*").eq("email", email_input).execute()
-                if len(response.data) > 0:
-                    st.session_state["user"] = response.data[0]
-                else:
-                    new_user = {"email": email_input, "plan_type": "FREE", "used_pages": 0}
-                    insert_res = supabase.table("users").insert(new_user).execute()
-                    st.session_state["user"] = insert_res.data[0]
+            # OTP 흐름 상태 관리
+            if "otp_sent" not in st.session_state:
+                st.session_state["otp_sent"] = False
+            if "pending_email" not in st.session_state:
+                st.session_state["pending_email"] = ""
+            
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            # 1단계: 이메일 입력 → 인증 코드 전송
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            if not st.session_state["otp_sent"]:
+                email_input = st.text_input(
+                    "이메일 주소", 
+                    placeholder="example@email.com", 
+                    label_visibility="collapsed",
+                    key="login_email"
+                )
+                send_btn = st.button(
+                    "✨ 인증 코드 받기", 
+                    type="primary", 
+                    use_container_width=True
+                )
+                st.markdown(
+                    "<p style='font-size: 0.8rem; color: #94a3b8; text-align: center; margin-top: 8px;'>"
+                    "📧 입력한 이메일로 6자리 인증 코드가 발송됩니다"
+                    "</p>", 
+                    unsafe_allow_html=True
+                )
                 
-                st.query_params["logged_in_email"] = email_input
-                st.rerun()  
+                if send_btn:
+                    # 간단한 이메일 형식 체크
+                    import re
+                    email_pattern = r"^[\w\.\-+]+@[\w\.\-]+\.\w+$"
+                    if not email_input or not re.match(email_pattern, email_input.strip()):
+                        st.error("⚠️ 올바른 이메일 형식이 아닙니다.")
+                    else:
+                        try:
+                            with st.spinner("📨 인증 코드 발송 중..."):
+                                # Supabase Auth로 OTP 발송 (기본 이메일 서비스 사용)
+                                supabase.auth.sign_in_with_otp({
+                                    "email": email_input.strip(),
+                                    "options": {"should_create_user": True}
+                                })
+                            st.session_state["otp_sent"] = True
+                            st.session_state["pending_email"] = email_input.strip()
+                            st.rerun()
+                        except Exception as e:
+                            err_msg = str(e)
+                            if "rate" in err_msg.lower() or "limit" in err_msg.lower():
+                                st.error("⏱️ 너무 자주 요청하셨어요. 잠시 후 다시 시도해주세요.")
+                            else:
+                                st.error(f"⚠️ 전송 실패: {err_msg}")
+            
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            # 2단계: OTP 코드 입력 → 검증 → 로그인
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            else:
+                st.info(
+                    f"📧 **{st.session_state['pending_email']}** 으로 "
+                    f"6자리 인증 코드를 보냈습니다.\n\n"
+                    f"메일을 확인하고 코드를 입력해주세요. *(스팸함도 확인)*"
+                )
+                otp_input = st.text_input(
+                    "6자리 인증 코드", 
+                    placeholder="000000",
+                    max_chars=6,
+                    key="otp_input"
+                )
+                verify_btn = st.button(
+                    "✅ 인증하고 시작하기", 
+                    type="primary", 
+                    use_container_width=True
+                )
+                
+                col_resend, col_back = st.columns(2)
+                with col_resend:
+                    if st.button("🔄 코드 재전송", use_container_width=True):
+                        try:
+                            with st.spinner("재전송 중..."):
+                                supabase.auth.sign_in_with_otp({
+                                    "email": st.session_state["pending_email"],
+                                    "options": {"should_create_user": True}
+                                })
+                            st.success("✅ 재전송 완료")
+                        except Exception as e:
+                            err_msg = str(e)
+                            if "rate" in err_msg.lower() or "limit" in err_msg.lower():
+                                st.error("⏱️ 잠시 후 다시 시도해주세요.")
+                            else:
+                                st.error(f"⚠️ {err_msg}")
+                with col_back:
+                    if st.button("⬅️ 이메일 다시 입력", use_container_width=True):
+                        st.session_state["otp_sent"] = False
+                        st.session_state["pending_email"] = ""
+                        st.rerun()
+                
+                if verify_btn:
+                    if not otp_input or len(otp_input.strip()) != 6:
+                        st.error("⚠️ 6자리 코드를 정확히 입력해주세요.")
+                    else:
+                        try:
+                            with st.spinner("🔐 인증 중..."):
+                                # Supabase Auth OTP 검증
+                                auth_response = supabase.auth.verify_otp({
+                                    "email": st.session_state["pending_email"],
+                                    "token": otp_input.strip(),
+                                    "type": "email"
+                                })
+                            
+                            if auth_response and auth_response.user:
+                                # 인증 성공 → 우리 users 테이블과 동기화
+                                verified_email = st.session_state["pending_email"]
+                                response = supabase.table("users").select("*").eq("email", verified_email).execute()
+                                
+                                if len(response.data) > 0:
+                                    st.session_state["user"] = response.data[0]
+                                else:
+                                    new_user = {"email": verified_email, "plan_type": "FREE", "used_pages": 0}
+                                    insert_res = supabase.table("users").insert(new_user).execute()
+                                    st.session_state["user"] = insert_res.data[0]
+                                
+                                # OTP 상태 정리
+                                st.session_state["otp_sent"] = False
+                                st.session_state["pending_email"] = ""
+                                st.query_params["logged_in_email"] = verified_email
+                                st.rerun()
+                            else:
+                                st.error("⚠️ 인증 실패. 코드를 다시 확인해주세요.")
+                        except Exception as e:
+                            err_msg = str(e)
+                            if "expired" in err_msg.lower():
+                                st.error("⏱️ 인증 코드가 만료되었습니다. 재전송 해주세요.")
+                            elif "invalid" in err_msg.lower():
+                                st.error("⚠️ 잘못된 인증 코드입니다.")
+                            else:
+                                st.error(f"⚠️ 인증 실패: {err_msg}")
 
     with col_right:
         try:
@@ -532,6 +625,8 @@ with st.sidebar:
             "include_next_page", "fullscreen_result", "fullscreen_pdf",
             # 모드 선택
             "selected_mode",
+            # OTP 인증 상태
+            "otp_sent", "pending_email", "otp_input",
             # Streamlit 위젯 키들
             "file_uploader_main", "mode_selector_main", "view_page_input",
             "login_email",
