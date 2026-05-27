@@ -255,9 +255,23 @@ st.markdown("""
 # 🔒 2. Supabase 연결 및 F5 새로고침 방어 로직
 # ============================================================
 SUPABASE_URL = "https://nufvazmyuvhqkeysfwla.supabase.co"
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+
+# 🌐 Streamlit Cloud / Render 양쪽 지원 헬퍼
+# - Streamlit Cloud: .streamlit/secrets.toml 에서 자동 로드
+# - Render: 환경변수에서 자동 로드
+def get_secret(key, default=None):
+    import os
+    val = os.environ.get(key)
+    if val:
+        return val
+    try:
+        return st.secrets[key]
+    except Exception:
+        return default
+
+SUPABASE_KEY = get_secret("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
 MODEL_NAME = "gemini-3.1-flash-lite" 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
