@@ -293,7 +293,8 @@ st.markdown("""
         box-shadow: none !important;
     }
     div[class*="st-key-modebtn"] button:hover {
-        background: rgba(255,255,255,0.05) !important;
+        background: transparent !important;
+        color: transparent !important;
     }
     div[class*="st-key-modebtn"] button:focus,
     div[class*="st-key-modebtn"] button:active {
