@@ -1066,11 +1066,33 @@ with st.expander("문서 & 해석 설정", expanded=True):
         </div>
         """, unsafe_allow_html=True)
         st.caption("어려운 기술 문서, 불필요한 사설 없이 핵심만 명확하게 짚어드립니다.")
-        uploaded_file = st.file_uploader(
-            "문서 파일 업로드 (PDF, TXT, DOCX)", 
-            type=["pdf", "txt", "docx"],
-            key="file_uploader_main"
+        
+        # 🆕 입력 방식 토글 — 파일 업로드 / 텍스트 붙여넣기
+        input_mode = st.radio(
+            "입력 방식",
+            ["📤 파일 업로드", "📝 텍스트 붙여넣기"],
+            horizontal=True,
+            label_visibility="collapsed",
+            key="input_mode_main"
         )
+        
+        uploaded_file = None
+        pasted_text = None
+        
+        if input_mode == "📤 파일 업로드":
+            uploaded_file = st.file_uploader(
+                "문서 파일 업로드 (PDF, TXT, DOCX)", 
+                type=["pdf", "txt", "docx"],
+                key="file_uploader_main"
+            )
+        else:
+            pasted_text = st.text_area(
+                "텍스트 붙여넣기",
+                height=220,
+                placeholder="여기에 글을 붙여넣으세요. (영어 원문, 매뉴얼, 논문, 기사 등)\nTXT 파일처럼 글자 수에 맞춰 자동으로 페이지가 나뉩니다.",
+                label_visibility="collapsed",
+                key="pasted_text_main"
+            )
     
     with top_right:
         with st.container(border=True):
@@ -1084,9 +1106,21 @@ with st.expander("문서 & 해석 설정", expanded=True):
             )
             st.session_state["selected_mode"] = selected_mode
     
+    # 🆕 입력 소스 통합 — 파일 업로드 또는 붙여넣기 텍스트
+    content_id = None
+    content_ext = None
     if uploaded_file is not None:
-        file_id = f"{uploaded_file.name}_{uploaded_file.size}"
-        file_ext = uploaded_file.name.split('.')[-1].lower()
+        content_id = f"{uploaded_file.name}_{uploaded_file.size}"
+        content_ext = uploaded_file.name.split('.')[-1].lower()
+    elif pasted_text and pasted_text.strip() and len(pasted_text.strip()) >= 10:
+        # 붙여넣은 텍스트 → 해시로 고유 ID 생성, TXT로 취급
+        text_hash = hashlib.md5(pasted_text.encode('utf-8')).hexdigest()[:12]
+        content_id = f"paste_{text_hash}_{len(pasted_text)}"
+        content_ext = "txt"
+    
+    if content_id is not None:
+        file_id = content_id
+        file_ext = content_ext
         
         if st.session_state.get("file_id") != file_id:
             with st.spinner("📖 문서 읽는 중..."):
@@ -1095,7 +1129,11 @@ with st.expander("문서 & 해석 설정", expanded=True):
                     pdf_path, total_pages_loaded = parse_pdf_lazy(uploaded_file, file_id)
                     page_texts = []  # PDF는 텍스트도 lazy — 보는 페이지만 즉석 추출
                 elif file_ext == "txt":
-                    txt_bytes = uploaded_file.read()
+                    # 파일 업로드면 read(), 붙여넣기면 인코딩
+                    if uploaded_file is not None:
+                        txt_bytes = uploaded_file.read()
+                    else:
+                        txt_bytes = pasted_text.encode('utf-8')
                     page_texts = parse_txt(txt_bytes)
                     pdf_path = None
                     total_pages_loaded = len(page_texts)
@@ -1131,7 +1169,8 @@ with st.expander("문서 & 해석 설정", expanded=True):
             )
         
         total_pages_show = st.session_state.get("total_pages", 1)
-        st.success(f"✅ 총 {total_pages_show} 페이지 · 준비 완료 (보는 페이지만 즉석 표시)")
+        source_label = "텍스트" if content_id.startswith("paste_") else "문서"
+        st.success(f"✅ {source_label} 총 {total_pages_show} 페이지 · 준비 완료 (보는 페이지만 즉석 표시)")
         # 🆕 초대형 문서 부드러운 경고 (막지 않고 안내만)
         if total_pages_show > 800:
             st.warning(
@@ -1143,9 +1182,9 @@ with st.expander("문서 & 해석 설정", expanded=True):
         total_pages_show = st.session_state.get("total_pages", 1)
         st.success(f"✅ 총 {total_pages_show} 페이지 · 준비 완료 (이전 세션 복구)")
     else:
-        st.info("👆 좌측에 문서를 업로드하면 툴이 시작됩니다.")
+        st.info("👆 좌측에 문서를 업로드하거나 텍스트를 붙여넣으면 툴이 시작됩니다.")
 
-if uploaded_file is None and "file_id" not in st.session_state:
+if content_id is None and "file_id" not in st.session_state:
     st.stop()
 
 total_pages = st.session_state.get("total_pages", 1)
