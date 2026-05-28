@@ -396,9 +396,9 @@ def get_page_text(file_ext, pdf_path, page_texts, page_index):
     return ""
 
 
-def render_pdf_page_image(pdf_path, page_index, dpi=1.0):
+def render_pdf_page_image(pdf_path, page_index, dpi=2.0):
     """PDF 한 페이지만 즉석 렌더링. 캐시된 doc 재사용 + 적응형 해상도.
-    큰 페이지(기술 도면 등)는 자동 축소해 메모리 폭발 방지."""
+    화질 우선: 가장 긴 변 ~2200px까지 허용 (선명하게)."""
     if not pdf_path or not os.path.exists(pdf_path):
         return None
     pix = None
@@ -407,13 +407,14 @@ def render_pdf_page_image(pdf_path, page_index, dpi=1.0):
         if page_index < 0 or page_index >= len(doc):
             return None
         page = doc[page_index]
-        # 적응형 해상도: 가장 긴 변이 ~1200px 넘지 않게 자동 조정
+        # 적응형 해상도: 가장 긴 변이 ~2200px 넘지 않게 (화질 좋게, 메모리 과하지 않게)
         rect = page.rect
         max_dim = max(rect.width, rect.height)
-        target_px = 1200
+        target_px = 2200
         scale = min(dpi, target_px / max_dim) if max_dim > 0 else dpi
         pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
-        img_bytes = pix.tobytes("jpeg", jpg_quality=80)
+        # JPEG quality 92 — 선명한 화질
+        img_bytes = pix.tobytes("jpeg", jpg_quality=92)
         return img_bytes
     except Exception:
         return None
@@ -422,7 +423,7 @@ def render_pdf_page_image(pdf_path, page_index, dpi=1.0):
         gc.collect()
 
 
-def get_or_render_page(pdf_path, page_index, dpi=1.0):
+def get_or_render_page(pdf_path, page_index, dpi=2.0):
     """세션 캐시 활용 (최근 본 4페이지 유지) — 2페이지 모드에서도 재렌더링 최소화"""
     cache_key = "_pdf_page_cache"
     cache = st.session_state.setdefault(cache_key, {})
@@ -1009,7 +1010,7 @@ def build_prompt(text: str, mode: str) -> str:
 - 그림·다이어그램·그래프가 언급되면 그게 보여주는 핵심을 글로 설명
 - 단순 번역 절대 금지 — 항상 "그래서 이게 무슨 뜻이냐면" 수준으로 한 단계 더 풀어쓰기
 
-### 3️⃣ 인사이트 (실전 관점)
+### 3️⃣ 인사이트
 - 이 내용과 관련해 현업에서 자주 마주치는 함정·실수·오해를 **구체적으로**
 - 왜 중요한가 — 성능·비용·QoR·수율·타이밍 등 실제 영향과 연결지어 설명
 - 이 지식이 실무 어느 국면에서 어떻게 쓰이는지 맥락
