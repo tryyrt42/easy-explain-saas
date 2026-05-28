@@ -274,6 +274,12 @@ st.markdown("""
         resize: none !important;
     }
 
+    /* === 알림바(준비완료/안내) 두께 줄이기 === */
+    [data-testid="stAlert"] {
+        padding-top: 0.55rem !important;
+        padding-bottom: 0.55rem !important;
+    }
+
     /* === 해석 모드 카드: 투명 버튼을 카드 위에 겹쳐서 클릭 영역으로 === */
     div[class*="st-key-modebtn"] {
         margin-top: -54px !important;   /* 위 카드와 겹치도록 끌어올림 */
@@ -1072,7 +1078,7 @@ with st.expander("문서 & 해석 설정", expanded=True):
     top_left, top_right = st.columns(2, gap="large")
     
     with top_left:
-        with st.container(border=True, height=330):
+        with st.container(border=True, height=290):
             st.markdown("""
             <div style='display: flex; align-items: center; gap: 14px; margin: 0.25rem 0 0.5rem 0;'>
                 <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1130,7 +1136,7 @@ with st.expander("문서 & 해석 설정", expanded=True):
                 pasted_text = st.session_state.get("paste_committed", "")
     
     with top_right:
-        with st.container(border=True, height=330):
+        with st.container(border=True, height=290):
             st.markdown("### 해석 컨트롤러")
             
             # 모드별 엠블럼(SVG) + 색상 + 설명
