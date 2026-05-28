@@ -1070,7 +1070,7 @@ with st.expander("문서 & 해석 설정", expanded=True):
         # 🆕 입력 방식 토글 — 파일 업로드 / 텍스트 붙여넣기
         input_mode = st.radio(
             "입력 방식",
-            ["📤 파일 업로드", "📝 텍스트 붙여넣기"],
+            ["파일 업로드", "텍스트 붙여넣기"],
             horizontal=True,
             label_visibility="collapsed",
             key="input_mode_main"
@@ -1079,20 +1079,21 @@ with st.expander("문서 & 해석 설정", expanded=True):
         uploaded_file = None
         pasted_text = None
         
-        if input_mode == "📤 파일 업로드":
+        if input_mode == "파일 업로드":
             uploaded_file = st.file_uploader(
                 "문서 파일 업로드 (PDF, TXT, DOCX)", 
                 type=["pdf", "txt", "docx"],
                 key="file_uploader_main"
             )
         else:
-            pasted_text = st.text_area(
-                "텍스트 붙여넣기",
-                height=220,
-                placeholder="여기에 글을 붙여넣으세요. (영어 원문, 매뉴얼, 논문, 기사 등)\nTXT 파일처럼 글자 수에 맞춰 자동으로 페이지가 나뉩니다.",
-                label_visibility="collapsed",
+            st.markdown("문서 텍스트 붙여넣기")
+            # chat_input: Enter로 제출 + 제출 후 자동 비움 (줄바꿈은 Shift+Enter)
+            submitted_text = st.chat_input(
+                "여기에 글을 붙여넣고 Enter (줄바꿈은 Shift+Enter)",
                 key="pasted_text_main"
             )
+            if submitted_text:
+                pasted_text = submitted_text
     
     with top_right:
         with st.container(border=True):
