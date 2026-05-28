@@ -1048,45 +1048,43 @@ if "include_next_page" not in st.session_state:
 mode_keys = list(PROMPT_TEMPLATES.keys())
 
 with st.expander("문서 & 해석 설정", expanded=True):
-    top_left, top_div, top_right = st.columns([20, 1, 18], gap="small", vertical_alignment="top")
+    top_left, top_right = st.columns(2, gap="large")
     
     with top_left:
-        st.markdown("""
-        <div style='display: flex; align-items: center; gap: 14px; margin: 0.25rem 0 0.5rem 0;'>
-            <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                    <linearGradient id="title-emblem-back-app" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stop-color="#c4b5fd"/>
-                        <stop offset="100%" stop-color="#8b5cf6"/>
-                    </linearGradient>
-                    <linearGradient id="title-emblem-front-app" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stop-color="#818cf8"/>
-                        <stop offset="100%" stop-color="#4f46e5"/>
-                    </linearGradient>
-                </defs>
-                <rect x="2" y="2" width="22" height="22" rx="7" fill="url(#title-emblem-back-app)" opacity="0.6"/>
-                <rect x="16" y="16" width="22" height="22" rx="7" fill="url(#title-emblem-front-app)"/>
-            </svg>
-            <h1 style='margin: 0; padding: 0; line-height: 1.1;'>쉬운 문서 해석기</h1>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption("어려운 기술 문서, 불필요한 사설 없이 핵심만 명확하게 짚어드립니다.")
-        
-        # 🆕 입력 방식 토글 — 파일 업로드 / 텍스트 붙여넣기
-        input_mode = st.radio(
-            "입력 방식",
-            ["파일 업로드", "텍스트 붙여넣기"],
-            horizontal=True,
-            label_visibility="collapsed",
-            key="input_mode_main"
-        )
-        
-        uploaded_file = None
-        pasted_text = None
-        
-        # 🔑 입력 위젯을 고정 높이 박스로 감쌈 (border=True여야 height 고정이 확실히 적용)
-        #    → 파일/붙여넣기 모드 높이 물리적으로 동일 → 오른쪽 컨트롤러/수직선 안 움직임
-        with st.container(height=175, border=True):
+        with st.container(border=True, height=330):
+            st.markdown("""
+            <div style='display: flex; align-items: center; gap: 14px; margin: 0.25rem 0 0.5rem 0;'>
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="title-emblem-back-app" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#c4b5fd"/>
+                            <stop offset="100%" stop-color="#8b5cf6"/>
+                        </linearGradient>
+                        <linearGradient id="title-emblem-front-app" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#818cf8"/>
+                            <stop offset="100%" stop-color="#4f46e5"/>
+                        </linearGradient>
+                    </defs>
+                    <rect x="2" y="2" width="22" height="22" rx="7" fill="url(#title-emblem-back-app)" opacity="0.6"/>
+                    <rect x="16" y="16" width="22" height="22" rx="7" fill="url(#title-emblem-front-app)"/>
+                </svg>
+                <h1 style='margin: 0; padding: 0; line-height: 1.1;'>쉬운 문서 해석기</h1>
+            </div>
+            """, unsafe_allow_html=True)
+            st.caption("어려운 기술 문서, 불필요한 사설 없이 핵심만 명확하게 짚어드립니다.")
+            
+            # 🆕 입력 방식 토글 — 파일 업로드 / 텍스트 붙여넣기
+            input_mode = st.radio(
+                "입력 방식",
+                ["파일 업로드", "텍스트 붙여넣기"],
+                horizontal=True,
+                label_visibility="collapsed",
+                key="input_mode_main"
+            )
+            
+            uploaded_file = None
+            pasted_text = None
+            
             if input_mode == "파일 업로드":
                 uploaded_file = st.file_uploader(
                     "문서 파일 업로드 (PDF, TXT, DOCX)", 
@@ -1110,16 +1108,8 @@ with st.expander("문서 & 해석 설정", expanded=True):
                 )
                 pasted_text = st.session_state.get("paste_committed", "")
     
-    with top_div:
-        # 좌/우를 나누는 은은한 세로 구분선
-        st.markdown(
-            "<div style='border-left:1px solid rgba(255,255,255,0.12); "
-            "height:100%; min-height:240px; width:1px; margin:0 auto;'></div>",
-            unsafe_allow_html=True
-        )
-    
     with top_right:
-        with st.container(border=True):
+        with st.container(border=True, height=330):
             st.markdown("### 해석 컨트롤러")
             selected_mode = st.selectbox(
                 "해석 스타일 선택",
