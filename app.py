@@ -1084,9 +1084,9 @@ with st.expander("문서 & 해석 설정", expanded=True):
         uploaded_file = None
         pasted_text = None
         
-        # 🔑 입력 위젯을 고정 높이 컨테이너로 감쌈 → 파일/붙여넣기 모드 높이 물리적으로 동일
-        #    → 왼쪽 컬럼 높이 불변 → 오른쪽 컨트롤러/수직선 절대 안 움직임
-        with st.container(height=150, border=False):
+        # 🔑 입력 위젯을 고정 높이 박스로 감쌈 (border=True여야 height 고정이 확실히 적용)
+        #    → 파일/붙여넣기 모드 높이 물리적으로 동일 → 오른쪽 컨트롤러/수직선 안 움직임
+        with st.container(height=175, border=True):
             if input_mode == "파일 업로드":
                 uploaded_file = st.file_uploader(
                     "문서 파일 업로드 (PDF, TXT, DOCX)", 
