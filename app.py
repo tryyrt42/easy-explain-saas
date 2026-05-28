@@ -9,6 +9,7 @@ import docx
 import io    
 import os
 import re
+import gc
 import tempfile
 import hashlib
 import streamlit as st
@@ -364,19 +365,23 @@ def parse_pdf_lazy(pdf_bytes, file_id):
 
 
 def get_pdf_page_text(pdf_path, page_index):
-    """PDF 한 페이지의 텍스트만 즉석 추출 (AI 해석용)"""
+    """PDF 한 페이지의 텍스트만 즉석 추출 (AI 해석용). 메모리 적극 정리."""
     if not pdf_path or not os.path.exists(pdf_path):
         return ""
+    doc = None
     try:
         doc = fitz.open(pdf_path)
         if 0 <= page_index < len(doc):
             text = doc[page_index].get_text()
         else:
             text = ""
-        doc.close()
         return text
     except Exception:
         return ""
+    finally:
+        if doc is not None:
+            doc.close()
+        gc.collect()
 
 
 def get_page_text(file_ext, pdf_path, page_texts, page_index):
@@ -388,27 +393,37 @@ def get_page_text(file_ext, pdf_path, page_texts, page_index):
     return ""
 
 
-def render_pdf_page_image(pdf_path, page_index, dpi=1.2):
-    """PDF 한 페이지만 즉석 렌더링. JPEG로 압축해 메모리 절약."""
+def render_pdf_page_image(pdf_path, page_index, dpi=1.0):
+    """PDF 한 페이지만 즉석 렌더링. 적응형 해상도 + 적극적 메모리 정리.
+    큰 페이지(기술 도면 등)는 자동 축소해 메모리 폭발 방지."""
     if not pdf_path or not os.path.exists(pdf_path):
         return None
+    doc = None
+    pix = None
     try:
         doc = fitz.open(pdf_path)
         if page_index < 0 or page_index >= len(doc):
-            doc.close()
             return None
         page = doc[page_index]
-        pix = page.get_pixmap(matrix=fitz.Matrix(dpi, dpi))
-        # JPEG quality 85 — 화면용으로 충분, PNG보다 60-70% 작음
-        img_bytes = pix.tobytes("jpeg", jpg_quality=85)
-        doc.close()
+        # 🆕 적응형 해상도: 가장 긴 변이 ~1200px 넘지 않게 자동 조정
+        rect = page.rect
+        max_dim = max(rect.width, rect.height)
+        target_px = 1200
+        scale = min(dpi, target_px / max_dim) if max_dim > 0 else dpi
+        pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
+        img_bytes = pix.tobytes("jpeg", jpg_quality=80)
         return img_bytes
     except Exception:
         return None
+    finally:
+        pix = None
+        if doc is not None:
+            doc.close()
+        gc.collect()
 
 
-def get_or_render_page(pdf_path, page_index, dpi=1.2):
-    """세션 캐시 활용 (최근 본 3페이지만 유지) — 재렌더링 방지"""
+def get_or_render_page(pdf_path, page_index, dpi=1.0):
+    """세션 캐시 활용 (최근 본 2페이지만 유지) — 재렌더링 방지 + 메모리 절약"""
     cache_key = "_pdf_page_cache"
     cache = st.session_state.setdefault(cache_key, {})
     full_key = f"{pdf_path}::{page_index}"
@@ -420,8 +435,8 @@ def get_or_render_page(pdf_path, page_index, dpi=1.2):
     if img is None:
         return None
     
-    # LRU: 3페이지 초과 시 가장 오래된 것 제거
-    if len(cache) >= 3:
+    # LRU: 2페이지 초과 시 가장 오래된 것 제거 (메모리 절약)
+    if len(cache) >= 2:
         oldest_key = next(iter(cache))
         del cache[oldest_key]
     cache[full_key] = img
