@@ -1084,29 +1084,31 @@ with st.expander("문서 & 해석 설정", expanded=True):
         uploaded_file = None
         pasted_text = None
         
-        if input_mode == "파일 업로드":
-            uploaded_file = st.file_uploader(
-                "문서 파일 업로드 (PDF, TXT, DOCX)", 
-                type=["pdf", "txt", "docx"],
-                key="file_uploader_main"
-            )
-        else:
-            # 일반 위젯(text_area) — file_uploader와 동일한 기본 라벨 사용 → 높이·폰트 자동 일치
-            # 제출(Ctrl+Enter 또는 포커스 아웃) 시 콜백으로 내용 확정 + 입력칸 비우기
-            def _commit_paste():
-                txt = st.session_state.get("pasted_text_main", "")
-                if txt and txt.strip() and len(txt.strip()) >= 10:
-                    st.session_state["paste_committed"] = txt
-                st.session_state["pasted_text_main"] = ""  # 입력칸 비우기
-            
-            st.text_area(
-                "문서 텍스트 붙여넣기 (Ctrl+Enter)",
-                height=68,
-                placeholder="여기에 글을 붙여넣고 Ctrl+Enter",
-                key="pasted_text_main",
-                on_change=_commit_paste,
-            )
-            pasted_text = st.session_state.get("paste_committed", "")
+        # 🔑 입력 위젯을 고정 높이 컨테이너로 감쌈 → 파일/붙여넣기 모드 높이 물리적으로 동일
+        #    → 왼쪽 컬럼 높이 불변 → 오른쪽 컨트롤러/수직선 절대 안 움직임
+        with st.container(height=150, border=False):
+            if input_mode == "파일 업로드":
+                uploaded_file = st.file_uploader(
+                    "문서 파일 업로드 (PDF, TXT, DOCX)", 
+                    type=["pdf", "txt", "docx"],
+                    key="file_uploader_main"
+                )
+            else:
+                # text_area — 제출(Ctrl+Enter/포커스아웃) 시 콜백으로 내용 확정 + 입력칸 비우기
+                def _commit_paste():
+                    txt = st.session_state.get("pasted_text_main", "")
+                    if txt and txt.strip() and len(txt.strip()) >= 10:
+                        st.session_state["paste_committed"] = txt
+                    st.session_state["pasted_text_main"] = ""  # 입력칸 비우기
+                
+                st.text_area(
+                    "문서 텍스트 붙여넣기 (Ctrl+Enter)",
+                    height=68,
+                    placeholder="여기에 글을 붙여넣고 Ctrl+Enter",
+                    key="pasted_text_main",
+                    on_change=_commit_paste,
+                )
+                pasted_text = st.session_state.get("paste_committed", "")
     
     with top_div:
         # 좌/우를 나누는 은은한 세로 구분선
