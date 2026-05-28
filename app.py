@@ -350,17 +350,42 @@ def get_pdf_temp_path(file_id):
 
 
 def parse_pdf_lazy(pdf_bytes, file_id):
-    """PDF를 디스크에 저장 + 텍스트만 추출 (이미지 렌더링은 보는 페이지만 나중에)"""
+    """PDF를 디스크에 저장 + 페이지 수만 확인.
+    텍스트/이미지 모두 보는 페이지만 즉석 추출 (926페이지도 메모리 안전)"""
     pdf_path = get_pdf_temp_path(file_id)
     # 디스크에 저장 (재업로드 시 같은 경로에 덮어쓰기)
     with open(pdf_path, 'wb') as f:
         f.write(pdf_bytes)
-    # 텍스트 추출 (빠름, 메모리 적음)
+    # 페이지 수만 확인 (텍스트 추출 안 함 — 메모리 절약)
     doc = fitz.open(pdf_path)
-    page_texts = [page.get_text() for page in doc]
     total_pages = len(doc)
     doc.close()
-    return pdf_path, page_texts, total_pages
+    return pdf_path, total_pages
+
+
+def get_pdf_page_text(pdf_path, page_index):
+    """PDF 한 페이지의 텍스트만 즉석 추출 (AI 해석용)"""
+    if not pdf_path or not os.path.exists(pdf_path):
+        return ""
+    try:
+        doc = fitz.open(pdf_path)
+        if 0 <= page_index < len(doc):
+            text = doc[page_index].get_text()
+        else:
+            text = ""
+        doc.close()
+        return text
+    except Exception:
+        return ""
+
+
+def get_page_text(file_ext, pdf_path, page_texts, page_index):
+    """페이지 텍스트 통합 헬퍼 — PDF는 즉석 추출, TXT/DOCX는 메모리에서"""
+    if file_ext == "pdf":
+        return get_pdf_page_text(pdf_path, page_index)
+    if page_texts and 0 <= page_index < len(page_texts):
+        return page_texts[page_index] or ""
+    return ""
 
 
 def render_pdf_page_image(pdf_path, page_index, dpi=1.2):
@@ -1036,7 +1061,8 @@ with st.expander("문서 & 해석 설정", expanded=True):
             with st.spinner("📖 문서 읽는 중..."):
                 if file_ext == "pdf":
                     pdf_bytes = uploaded_file.read()
-                    pdf_path, page_texts, total_pages_loaded = parse_pdf_lazy(pdf_bytes, file_id)
+                    pdf_path, total_pages_loaded = parse_pdf_lazy(pdf_bytes, file_id)
+                    page_texts = []  # PDF는 텍스트도 lazy — 보는 페이지만 즉석 추출
                 elif file_ext == "txt":
                     txt_bytes = uploaded_file.read()
                     page_texts = parse_txt(txt_bytes)
@@ -1414,13 +1440,13 @@ elif st.session_state["fullscreen_result"]:
             if st.button(f"✨ {num_pages_label}페이지 해석", type="primary", use_container_width=True, key="run_fs"):
                 if include_next:
                     text = (
-                        page_texts[view_page - 1].strip() 
-                        + "\n\n--- 다음 페이지 ---\n\n" 
-                        + page_texts[view_page].strip()
+                        get_page_text(file_ext, pdf_path, page_texts, view_page - 1).strip()
+                        + "\n\n--- 다음 페이지 ---\n\n"
+                        + get_page_text(file_ext, pdf_path, page_texts, view_page).strip()
                     )
                     pages_used = 2
                 else:
-                    text = page_texts[view_page - 1].strip() if page_texts else ""
+                    text = get_page_text(file_ext, pdf_path, page_texts, view_page - 1).strip()
                     pages_used = 1
                 
                 if run_interpretation(text, selected_mode, cache_key, pages_used=pages_used):
@@ -1533,13 +1559,13 @@ else:
             if interpret_btn and not is_cached:
                 if include_next:
                     text = (
-                        page_texts[view_page - 1].strip() 
-                        + "\n\n--- 다음 페이지 ---\n\n" 
-                        + page_texts[view_page].strip()
+                        get_page_text(file_ext, pdf_path, page_texts, view_page - 1).strip()
+                        + "\n\n--- 다음 페이지 ---\n\n"
+                        + get_page_text(file_ext, pdf_path, page_texts, view_page).strip()
                     )
                     pages_used = 2
                 else:
-                    text = page_texts[view_page - 1].strip() if page_texts else ""
+                    text = get_page_text(file_ext, pdf_path, page_texts, view_page - 1).strip()
                     pages_used = 1
                 
                 if run_interpretation(text, selected_mode, cache_key, pages_used=pages_used):
