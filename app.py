@@ -269,6 +269,16 @@ st.markdown("""
         background-color: rgba(74, 222, 128, 0.18) !important;
     }
 
+    /* === 입력 라벨 (파일/붙여넣기 공통) — 두 모드 폰트·여백 100% 일치 === */
+    .custom-input-label {
+        font-size: 14px !important;
+        font-weight: 400 !important;
+        color: rgb(250, 250, 250) !important;
+        margin-bottom: 0.25rem !important;
+        line-height: 1.4 !important;
+        font-family: "Source Sans Pro", sans-serif !important;
+    }
+
     /* === 붙여넣기 chat_input을 파일 업로더 회색 박스와 동일한 크기로 === */
     /* 파일 업로더 드롭존 높이(68px)에 맞춤 → 두 모드 높이 동일 → 오른쪽 컨트롤러 위치 고정 */
     [data-testid="stChatInput"] {
@@ -1093,13 +1103,15 @@ with st.expander("문서 & 해석 설정", expanded=True):
         pasted_text = None
         
         if input_mode == "파일 업로드":
+            st.markdown('<div class="custom-input-label">문서 파일 업로드 (PDF, TXT, DOCX)</div>', unsafe_allow_html=True)
             uploaded_file = st.file_uploader(
                 "문서 파일 업로드 (PDF, TXT, DOCX)", 
                 type=["pdf", "txt", "docx"],
+                label_visibility="collapsed",
                 key="file_uploader_main"
             )
         else:
-            st.markdown("문서 텍스트 붙여넣기")
+            st.markdown('<div class="custom-input-label">문서 텍스트 붙여넣기</div>', unsafe_allow_html=True)
             # chat_input: Enter로 제출 + 제출 후 자동 비움 (줄바꿈은 Shift+Enter)
             submitted_text = st.chat_input(
                 "여기에 글을 붙여넣고 Enter (줄바꿈은 Shift+Enter)",
