@@ -358,32 +358,33 @@ def parse_pdf_lazy(uploaded_file, file_id):
     # getbuffer() = zero-copy. .read()처럼 새 40MB 복사본을 안 만듦
     with open(pdf_path, 'wb') as f:
         f.write(uploaded_file.getbuffer())
-    # 페이지 수만 확인 (디스크 파일을 memory-map으로 열어 메모리 절약)
-    doc = fitz.open(pdf_path)
+    # 새 파일이므로 이전에 캐시된 doc 비우기 (stale 방지)
+    get_cached_pdf_doc.clear()
+    # 페이지 수 확인 (캐시에 등록됨 → 이후 페이지 넘길 때 재사용)
+    doc = get_cached_pdf_doc(pdf_path)
     total_pages = len(doc)
-    doc.close()
     gc.collect()
     return pdf_path, total_pages
 
 
+@st.cache_resource(max_entries=2, show_spinner=False)
+def get_cached_pdf_doc(pdf_path):
+    """열린 PDF 문서를 캐싱 — 페이지 넘길 때마다 재오픈/재인덱싱 방지.
+    2471페이지 같은 대용량에서 핵심 (인덱싱을 1회만 수행)"""
+    return fitz.open(pdf_path)
+
+
 def get_pdf_page_text(pdf_path, page_index):
-    """PDF 한 페이지의 텍스트만 즉석 추출 (AI 해석용). 메모리 적극 정리."""
+    """PDF 한 페이지의 텍스트만 즉석 추출 (AI 해석용). 캐시된 doc 재사용."""
     if not pdf_path or not os.path.exists(pdf_path):
         return ""
-    doc = None
     try:
-        doc = fitz.open(pdf_path)
+        doc = get_cached_pdf_doc(pdf_path)  # 재사용 (재오픈 X)
         if 0 <= page_index < len(doc):
-            text = doc[page_index].get_text()
-        else:
-            text = ""
-        return text
+            return doc[page_index].get_text()
+        return ""
     except Exception:
         return ""
-    finally:
-        if doc is not None:
-            doc.close()
-        gc.collect()
 
 
 def get_page_text(file_ext, pdf_path, page_texts, page_index):
@@ -396,18 +397,17 @@ def get_page_text(file_ext, pdf_path, page_texts, page_index):
 
 
 def render_pdf_page_image(pdf_path, page_index, dpi=1.0):
-    """PDF 한 페이지만 즉석 렌더링. 적응형 해상도 + 적극적 메모리 정리.
+    """PDF 한 페이지만 즉석 렌더링. 캐시된 doc 재사용 + 적응형 해상도.
     큰 페이지(기술 도면 등)는 자동 축소해 메모리 폭발 방지."""
     if not pdf_path or not os.path.exists(pdf_path):
         return None
-    doc = None
     pix = None
     try:
-        doc = fitz.open(pdf_path)
+        doc = get_cached_pdf_doc(pdf_path)  # 재사용 (재오픈 X — 인덱싱 안 함)
         if page_index < 0 or page_index >= len(doc):
             return None
         page = doc[page_index]
-        # 🆕 적응형 해상도: 가장 긴 변이 ~1200px 넘지 않게 자동 조정
+        # 적응형 해상도: 가장 긴 변이 ~1200px 넘지 않게 자동 조정
         rect = page.rect
         max_dim = max(rect.width, rect.height)
         target_px = 1200
@@ -419,8 +419,6 @@ def render_pdf_page_image(pdf_path, page_index, dpi=1.0):
         return None
     finally:
         pix = None
-        if doc is not None:
-            doc.close()
         gc.collect()
 
 
@@ -1118,11 +1116,11 @@ with st.expander("문서 & 해석 설정", expanded=True):
             )
         
         total_pages_show = st.session_state.get("total_pages", 1)
-        st.success(f"✅ 총 {total_pages_show} 페이지 로드 완료")
+        st.success(f"✅ 총 {total_pages_show} 페이지 · 준비 완료 (보는 페이지만 즉석 표시)")
     elif "file_id" in st.session_state:
         # 🆕 F5 후: 업로더는 비어있지만 캐시에 파일 데이터가 있는 경우
         total_pages_show = st.session_state.get("total_pages", 1)
-        st.success(f"✅ 총 {total_pages_show} 페이지 로드됨 (이전 세션 복구)")
+        st.success(f"✅ 총 {total_pages_show} 페이지 · 준비 완료 (이전 세션 복구)")
     else:
         st.info("👆 좌측에 문서를 업로드하면 툴이 시작됩니다.")
 
