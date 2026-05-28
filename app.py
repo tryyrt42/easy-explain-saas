@@ -270,18 +270,16 @@ st.markdown("""
     }
 
     /* === 붙여넣기 chat_input을 파일 업로더 회색 박스와 동일한 크기로 === */
-    /* 파일 업로더 드롭존 높이에 맞춰 chat_input 박스를 키움 → 두 모드 높이 동일 → 오른쪽 컨트롤러 위치 고정 */
+    /* 파일 업로더 드롭존 높이(68px)에 맞춤 → 두 모드 높이 동일 → 오른쪽 컨트롤러 위치 고정 */
     [data-testid="stChatInput"] {
-        min-height: 84px !important;
+        min-height: 68px !important;
+        height: 68px !important;
         display: flex !important;
         align-items: center !important;
         border-radius: 8px !important;
     }
     [data-testid="stChatInput"] > div {
         width: 100% !important;
-    }
-    [data-testid="stChatInput"] textarea {
-        min-height: 60px !important;
     }
 </style>
 """, unsafe_allow_html=True)
