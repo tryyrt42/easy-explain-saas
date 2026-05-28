@@ -1111,7 +1111,7 @@ with st.expander("문서 & 해석 설정", expanded=True):
     with top_right:
         with st.container(border=True, height=330):
             st.markdown("### 해석 컨트롤러")
-            selected_mode = st.selectbox(
+            selected_mode = st.radio(
                 "해석 스타일 선택",
                 mode_keys,
                 index=mode_keys.index(st.session_state["selected_mode"]),
