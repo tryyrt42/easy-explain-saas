@@ -1644,7 +1644,13 @@ elif st.session_state["fullscreen_result"]:
             st.info(f"👆 위의 **[✨ {num_pages_label}페이지 해석]** 버튼을 눌러주세요.")
 
 else:
-    st.divider()
+    # 🟠 주황색 발광 포인트 라인 (기존 회색 divider 대체)
+    st.markdown(
+        "<div style='height:2px; margin:1.6rem 0; border-radius:2px; "
+        "background:linear-gradient(90deg, transparent, #f59e0b 20%, #fb923c 50%, #f59e0b 80%, transparent); "
+        "box-shadow:0 0 8px rgba(245,158,11,0.8), 0 0 18px rgba(251,146,60,0.5);'></div>",
+        unsafe_allow_html=True
+    )
     col_pdf, col_result = st.columns([1, 1], gap="large")
     
     with col_pdf:
