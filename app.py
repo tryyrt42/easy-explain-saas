@@ -278,18 +278,6 @@ st.markdown("""
         line-height: 1.4 !important;
         font-family: "Source Sans Pro", sans-serif !important;
     }
-
-    /* === 붙여넣기 chat_input을 파일 업로더 회색 박스와 동일한 크기로 === */
-    /* min-height만 사용 (height 고정 X) → 화면 줄여도 file_uploader처럼 반응형으로 늘어남 */
-    [data-testid="stChatInput"] {
-        min-height: 68px !important;
-        display: flex !important;
-        align-items: center !important;
-        border-radius: 8px !important;
-    }
-    [data-testid="stChatInput"] > div {
-        width: 100% !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -926,7 +914,7 @@ with st.sidebar:
             "otp_sent", "pending_email", "otp_input",
             # Streamlit 위젯 키들
             "file_uploader_main", "mode_selector_main", "view_page_input",
-            "login_email", "input_mode_main", "pasted_text_main",
+            "login_email", "input_mode_main", "pasted_text_main", "paste_committed",
         ]
         for key in keys_to_clear:
             if key in st.session_state:
@@ -1111,13 +1099,23 @@ with st.expander("문서 & 해석 설정", expanded=True):
             )
         else:
             st.markdown('<div class="custom-input-label">문서 텍스트 붙여넣기</div>', unsafe_allow_html=True)
-            # chat_input: Enter로 제출 + 제출 후 자동 비움 (줄바꿈은 Shift+Enter)
-            submitted_text = st.chat_input(
-                "여기에 글을 붙여넣고 Enter (줄바꿈은 Shift+Enter)",
-                key="pasted_text_main"
+            # 일반 위젯(text_area) — file_uploader처럼 정상 동작, 레이아웃 안 깨짐
+            # 제출(Ctrl+Enter 또는 포커스 아웃) 시 콜백으로 내용 확정 + 입력칸 비우기
+            def _commit_paste():
+                txt = st.session_state.get("pasted_text_main", "")
+                if txt and txt.strip() and len(txt.strip()) >= 10:
+                    st.session_state["paste_committed"] = txt
+                st.session_state["pasted_text_main"] = ""  # 입력칸 비우기
+            
+            st.text_area(
+                "문서 텍스트 붙여넣기",
+                height=68,
+                placeholder="여기에 글을 붙여넣고 Ctrl+Enter",
+                label_visibility="collapsed",
+                key="pasted_text_main",
+                on_change=_commit_paste,
             )
-            if submitted_text:
-                pasted_text = submitted_text
+            pasted_text = st.session_state.get("paste_committed", "")
     
     with top_right:
         with st.container(border=True):
