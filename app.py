@@ -273,6 +273,27 @@ st.markdown("""
     .stTextArea textarea {
         resize: none !important;
     }
+
+    /* === 해석 모드 카드: 투명 버튼을 카드 위에 겹쳐서 클릭 영역으로 === */
+    div[class*="st-key-modebtn"] {
+        margin-top: -54px !important;   /* 위 카드와 겹치도록 끌어올림 */
+        margin-bottom: 10px !important; /* 다음 카드와 간격 */
+    }
+    div[class*="st-key-modebtn"] button {
+        height: 50px !important;
+        background: transparent !important;
+        border: none !important;
+        color: transparent !important;  /* 버튼 글자 숨김 (카드가 보임) */
+        box-shadow: none !important;
+    }
+    div[class*="st-key-modebtn"] button:hover {
+        background: rgba(255,255,255,0.05) !important;
+    }
+    div[class*="st-key-modebtn"] button:focus,
+    div[class*="st-key-modebtn"] button:active {
+        color: transparent !important;
+        box-shadow: none !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1111,14 +1132,70 @@ with st.expander("문서 & 해석 설정", expanded=True):
     with top_right:
         with st.container(border=True, height=330):
             st.markdown("### 해석 컨트롤러")
-            selected_mode = st.radio(
-                "해석 스타일 선택",
-                mode_keys,
-                index=mode_keys.index(st.session_state["selected_mode"]),
-                label_visibility="collapsed",
-                key="mode_selector_main"
-            )
-            st.session_state["selected_mode"] = selected_mode
+            
+            # 모드별 엠블럼(SVG) + 색상 + 설명
+            mode_meta = {
+                mode_keys[0]: (  # 1타 강사
+                    "#818cf8",
+                    """<svg width="26" height="26" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
+                        <rect x="3" y="4" width="18" height="16" rx="1.5" fill="none" stroke="#818cf8" stroke-width="1.5"/>
+                        <line x1="6.5" y1="9" x2="14" y2="9" stroke="#818cf8" stroke-width="1.5" opacity="0.45" stroke-linecap="round"/>
+                        <line x1="6.5" y1="13" x2="17.5" y2="13" stroke="#818cf8" stroke-width="2.5" stroke-linecap="round"/>
+                        <line x1="6.5" y1="17" x2="11" y2="17" stroke="#818cf8" stroke-width="1.5" opacity="0.45" stroke-linecap="round"/>
+                    </svg>""",
+                ),
+                mode_keys[1]: (  # 비유
+                    "#c084fc",
+                    """<svg width="26" height="26" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
+                        <path d="M3 9 L7 5 L11 9 L7 13 Z" fill="#c084fc" opacity="0.75"/>
+                        <circle cx="17" cy="14" r="4" fill="#c084fc"/>
+                        <path d="M10.5 11 L13.5 11 M10.5 13 L13.5 13" stroke="#c084fc" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>""",
+                ),
+                mode_keys[2]: (  # 촌철살인 동네형
+                    "#f472b6",
+                    """<svg width="26" height="26" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
+                        <circle cx="12" cy="12" r="9" fill="none" stroke="#f472b6" stroke-width="1.5" opacity="0.4"/>
+                        <circle cx="12" cy="12" r="6" fill="none" stroke="#f472b6" stroke-width="1.5" opacity="0.65"/>
+                        <circle cx="12" cy="12" r="3" fill="none" stroke="#f472b6" stroke-width="1.5"/>
+                        <circle cx="12" cy="12" r="1.2" fill="#f472b6"/>
+                    </svg>""",
+                ),
+                mode_keys[3]: (  # 원서 독해
+                    "#4ade80",
+                    """<svg width="26" height="26" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
+                        <path d="M3 5.5 C 3 5.5, 7 4, 12 5.5 C 17 4, 21 5.5, 21 5.5 L 21 19 C 21 19, 17 17.5, 12 19 C 7 17.5, 3 19, 3 19 Z" fill="none" stroke="#4ade80" stroke-width="1.5" stroke-linejoin="round"/>
+                        <line x1="12" y1="5.5" x2="12" y2="19" stroke="#4ade80" stroke-width="1.5"/>
+                        <text x="7.5" y="14" font-family="Georgia, serif" font-size="6.5" font-weight="600" fill="#4ade80" text-anchor="middle">A</text>
+                        <text x="16.5" y="14" font-family="-apple-system, sans-serif" font-size="6.5" font-weight="600" fill="#4ade80" text-anchor="middle">가</text>
+                    </svg>""",
+                ),
+            }
+            
+            for idx_m, mode in enumerate(mode_keys):
+                color, emblem = mode_meta[mode]
+                is_sel = (mode == st.session_state["selected_mode"])
+                # 이모지 제거한 순수 모드 이름 (엠블럼이 이모지 대체)
+                clean_name = mode.split(" ", 1)[1] if " " in mode else mode
+                bg = f"{color}22" if is_sel else "transparent"
+                border = f"1px solid {color}" if is_sel else "1px solid rgba(255,255,255,0.1)"
+                weight = "700" if is_sel else "500"
+                # 카드 비주얼
+                st.markdown(
+                    f"<div style='display:flex; align-items:center; gap:12px; "
+                    f"height:26px; padding:12px 16px; border-radius:10px; "
+                    f"background:{bg}; border:{border};'>"
+                    f"{emblem}"
+                    f"<span style='font-size:17px; font-weight:{weight}; color:#f1f5f9;'>{clean_name}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+                # 카드 위에 얹는 투명 클릭 버튼 (CSS로 카드와 겹침)
+                if st.button(clean_name, key=f"modebtn{idx_m}", use_container_width=True):
+                    st.session_state["selected_mode"] = mode
+                    st.rerun()
+            
+            selected_mode = st.session_state["selected_mode"]
     
     # 🆕 입력 소스 통합 — 파일 업로드 또는 붙여넣기 텍스트
     content_id = None
