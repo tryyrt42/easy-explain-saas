@@ -1066,7 +1066,7 @@ if "include_next_page" not in st.session_state:
 mode_keys = list(PROMPT_TEMPLATES.keys())
 
 with st.expander("문서 & 해석 설정", expanded=True):
-    top_left, top_right = st.columns(2, gap="large")
+    top_left, top_right = st.columns(2, gap="large", vertical_alignment="top")
     
     with top_left:
         st.markdown("""
