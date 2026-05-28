@@ -367,10 +367,10 @@ def parse_pdf_lazy(uploaded_file, file_id):
     return pdf_path, total_pages
 
 
-@st.cache_resource(max_entries=2, show_spinner=False)
+@st.cache_resource(max_entries=1, show_spinner=False)
 def get_cached_pdf_doc(pdf_path):
     """열린 PDF 문서를 캐싱 — 페이지 넘길 때마다 재오픈/재인덱싱 방지.
-    2471페이지 같은 대용량에서 핵심 (인덱싱을 1회만 수행)"""
+    max_entries=1: 메모리 절약 (한 번에 한 문서만 캐시)"""
     return fitz.open(pdf_path)
 
 
@@ -988,18 +988,31 @@ def build_prompt(text: str, mode: str) -> str:
         return f"""{PROMPT_TEMPLATES[mode]}
 
 == 구조 지침 (반드시 따를 것) ==
+
 ### 1️⃣ 핵심 한 줄
 "[페이지 전체를 한 문장으로 꿰뚫는 요약]"
 
-### 2️⃣ 본격 해설 (짧게 끝내지 말 것!)
-- 페이지에 나오는 **모든 중요 개념을 빠짐없이** 다룰 것
-- 단순 번역이 아니라 **왜 필요한지**, **어떻게 동작하는지**, **무엇과 연결되는지** 맥락까지
-- 명령어 / 파라미터 / 옵션이 등장하면 각각의 역할을 **표**로 재구성
-- 어려운 개념은 일상 비유나 구체적 예시로 풀기
+### 2️⃣ 본격 해설 (이 섹션이 핵심 — 절대 짧게 끝내지 말 것)
 
-### 3️⃣ 인사이트
-- 실무에서 자주 마주치는 함정·실수·오해
-- 왜 이게 중요한가 (성능·비용·QoR·수율 등 실제 영향)
+⚠️ **[분량 경고]** 이 섹션의 목표는 원문 내용을 빠짐없이 풀어내는 거야. 원문에 개념이 5개 나오면 5개 다, 10개 나오면 10개 다 다뤄야 해. 적당히 요약하거나 중요한 것만 골라 쓰면 실패한 결과로 간주함. **원문에 담긴 정보 밀도만큼 해설도 풍부해야 하고, 원문이 길면(예: 2페이지) 해설도 그만큼 길어져야 해.**
+
+원문에 나오는 **각 개념/주제마다** 다음을 빠짐없이 풀어쓸 것:
+- **무엇인지**: 정의와 역할
+- **왜 필요한지**: 이게 없으면 어떤 문제가 생기는지
+- **어떻게 동작하는지**: 메커니즘·원리를, 단계가 있으면 단계별로 차근차근
+- **무엇과 연결되는지**: 앞뒤 개념, 다른 도구·단계·flow와의 관계
+- **구체화**: 어려운 개념은 일상 비유나 구체적 예시로 한 번 더 풀기
+
+추가로 반드시 챙길 것:
+- 명령어 / 파라미터 / 옵션 / 설정값이 등장하면 각각의 역할을 **표**로 정리
+- 숫자·수식·조건·임계값이 나오면 그게 *의미하는 바*까지 해석 (단순 나열 금지)
+- 그림·다이어그램·그래프가 언급되면 그게 보여주는 핵심을 글로 설명
+- 단순 번역 절대 금지 — 항상 "그래서 이게 무슨 뜻이냐면" 수준으로 한 단계 더 풀어쓰기
+
+### 3️⃣ 인사이트 (실전 관점)
+- 이 내용과 관련해 현업에서 자주 마주치는 함정·실수·오해를 **구체적으로**
+- 왜 중요한가 — 성능·비용·QoR·수율·타이밍 등 실제 영향과 연결지어 설명
+- 이 지식이 실무 어느 국면에서 어떻게 쓰이는지 맥락
 
 ### 4️⃣ 한 줄 정리
 가장 마지막에 페이지 핵심을 한 문장으로 압축.
@@ -1008,6 +1021,7 @@ def build_prompt(text: str, mode: str) -> str:
 - 기술 용어는 영문 그대로 유지 (Fusion Compiler, LVT 등).
 - 볼드체 뒤에는 조사 띄어쓰기.
 - 첫 줄에 인사말 금지. 바로 본론 진입.
+- **내용 대비 해설이 빈약하면 안 됨. 원문의 모든 정보를 독자가 완벽히 이해하도록 깊고 풍부하게 풀어낼 것.**
 
 == 해석할 문서 ==
 {text}"""
@@ -1117,6 +1131,12 @@ with st.expander("문서 & 해석 설정", expanded=True):
         
         total_pages_show = st.session_state.get("total_pages", 1)
         st.success(f"✅ 총 {total_pages_show} 페이지 · 준비 완료 (보는 페이지만 즉석 표시)")
+        # 🆕 초대형 문서 부드러운 경고 (막지 않고 안내만)
+        if total_pages_show > 800:
+            st.warning(
+                f"⚠️ {total_pages_show}페이지는 매우 큰 문서예요. 페이지 이동이 느리거나 "
+                "가끔 불안정할 수 있어요. 특정 챕터만 분리해서 올리면 훨씬 빠르고 정확합니다."
+            )
     elif "file_id" in st.session_state:
         # 🆕 F5 후: 업로더는 비어있지만 캐시에 파일 데이터가 있는 경우
         total_pages_show = st.session_state.get("total_pages", 1)
@@ -1340,7 +1360,7 @@ def run_interpretation(text, mode, cache_key, pages_used=1):
         genai.configure(api_key=GEMINI_API_KEY)
         model = genai.GenerativeModel(
             MODEL_NAME, 
-            generation_config=genai.types.GenerationConfig(max_output_tokens=8192)
+            generation_config=genai.types.GenerationConfig(max_output_tokens=16384)
         )
         current_user = st.session_state.get("user", {})
         is_admin = (current_user.get('plan_type') == 'ADMIN')
@@ -1353,6 +1373,7 @@ def run_interpretation(text, mode, cache_key, pages_used=1):
         
         spinner_msg = f"🧠 [ADMIN] {pages_used}페이지 분석 중..." if is_admin else f"🧠 {pages_used}페이지 분석 중..."
         with st.spinner(spinner_msg):
+            gc.collect()  # 🆕 호출 직전 메모리 정리 (대용량 PDF 캐시와 겹칠 때 OOM 방지)
             response = model.generate_content(build_prompt(text, mode))
         
         if not is_admin:
