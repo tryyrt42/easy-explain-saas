@@ -268,6 +268,21 @@ st.markdown("""
     .vocab-source:hover {
         background-color: rgba(74, 222, 128, 0.18) !important;
     }
+
+    /* === 붙여넣기 chat_input을 파일 업로더 회색 박스와 동일한 크기로 === */
+    /* 파일 업로더 드롭존 높이에 맞춰 chat_input 박스를 키움 → 두 모드 높이 동일 → 오른쪽 컨트롤러 위치 고정 */
+    [data-testid="stChatInput"] {
+        min-height: 84px !important;
+        display: flex !important;
+        align-items: center !important;
+        border-radius: 8px !important;
+    }
+    [data-testid="stChatInput"] > div {
+        width: 100% !important;
+    }
+    [data-testid="stChatInput"] textarea {
+        min-height: 60px !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1094,8 +1109,6 @@ with st.expander("문서 & 해석 설정", expanded=True):
             )
             if submitted_text:
                 pasted_text = submitted_text
-            # 왼쪽 컬럼 높이를 파일 업로드 모드와 맞춤 → 오른쪽 컨트롤러 위치 고정
-            st.markdown("<div style='height: 44px;'></div>", unsafe_allow_html=True)
     
     with top_right:
         with st.container(border=True):
