@@ -1094,6 +1094,8 @@ with st.expander("문서 & 해석 설정", expanded=True):
             )
             if submitted_text:
                 pasted_text = submitted_text
+            # 왼쪽 컬럼 높이를 파일 업로드 모드와 맞춤 → 오른쪽 컨트롤러 위치 고정
+            st.markdown("<div style='height: 44px;'></div>", unsafe_allow_html=True)
     
     with top_right:
         with st.container(border=True):
