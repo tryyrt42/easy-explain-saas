@@ -350,17 +350,19 @@ def get_pdf_temp_path(file_id):
     return os.path.join(tempfile.gettempdir(), f"easyeasy_{safe_id}.pdf")
 
 
-def parse_pdf_lazy(pdf_bytes, file_id):
-    """PDF를 디스크에 저장 + 페이지 수만 확인.
-    텍스트/이미지 모두 보는 페이지만 즉석 추출 (926페이지도 메모리 안전)"""
+def parse_pdf_lazy(uploaded_file, file_id):
+    """업로드 PDF를 메모리 복사 없이 디스크에 저장 + 페이지 수만 확인.
+    핵심: uploaded_file.read()(40MB 복사본 생성) 대신
+    getbuffer()(복사 없는 memoryview)로 디스크에 바로 씀 → 메모리 절약"""
     pdf_path = get_pdf_temp_path(file_id)
-    # 디스크에 저장 (재업로드 시 같은 경로에 덮어쓰기)
+    # getbuffer() = zero-copy. .read()처럼 새 40MB 복사본을 안 만듦
     with open(pdf_path, 'wb') as f:
-        f.write(pdf_bytes)
-    # 페이지 수만 확인 (텍스트 추출 안 함 — 메모리 절약)
+        f.write(uploaded_file.getbuffer())
+    # 페이지 수만 확인 (디스크 파일을 memory-map으로 열어 메모리 절약)
     doc = fitz.open(pdf_path)
     total_pages = len(doc)
     doc.close()
+    gc.collect()
     return pdf_path, total_pages
 
 
@@ -423,7 +425,7 @@ def render_pdf_page_image(pdf_path, page_index, dpi=1.0):
 
 
 def get_or_render_page(pdf_path, page_index, dpi=1.0):
-    """세션 캐시 활용 (최근 본 2페이지만 유지) — 재렌더링 방지 + 메모리 절약"""
+    """세션 캐시 활용 (최근 본 4페이지 유지) — 2페이지 모드에서도 재렌더링 최소화"""
     cache_key = "_pdf_page_cache"
     cache = st.session_state.setdefault(cache_key, {})
     full_key = f"{pdf_path}::{page_index}"
@@ -435,8 +437,9 @@ def get_or_render_page(pdf_path, page_index, dpi=1.0):
     if img is None:
         return None
     
-    # LRU: 2페이지 초과 시 가장 오래된 것 제거 (메모리 절약)
-    if len(cache) >= 2:
+    # LRU: 4페이지 초과 시 가장 오래된 것 제거
+    # (2페이지 모드 = 현재 쌍 2개 + 직전 쌍 일부 캐시 가능)
+    if len(cache) >= 4:
         oldest_key = next(iter(cache))
         del cache[oldest_key]
     cache[full_key] = img
@@ -996,7 +999,7 @@ def build_prompt(text: str, mode: str) -> str:
 - 명령어 / 파라미터 / 옵션이 등장하면 각각의 역할을 **표**로 재구성
 - 어려운 개념은 일상 비유나 구체적 예시로 풀기
 
-### 3️⃣ 실무 인사이트
+### 3️⃣ 인사이트
 - 실무에서 자주 마주치는 함정·실수·오해
 - 왜 이게 중요한가 (성능·비용·QoR·수율 등 실제 영향)
 
@@ -1075,8 +1078,8 @@ with st.expander("문서 & 해석 설정", expanded=True):
         if st.session_state.get("file_id") != file_id:
             with st.spinner("📖 문서 읽는 중..."):
                 if file_ext == "pdf":
-                    pdf_bytes = uploaded_file.read()
-                    pdf_path, total_pages_loaded = parse_pdf_lazy(pdf_bytes, file_id)
+                    # 메모리 복사 없이 디스크로 직접 저장 (uploaded_file 그대로 전달)
+                    pdf_path, total_pages_loaded = parse_pdf_lazy(uploaded_file, file_id)
                     page_texts = []  # PDF는 텍스트도 lazy — 보는 페이지만 즉석 추출
                 elif file_ext == "txt":
                     txt_bytes = uploaded_file.read()
