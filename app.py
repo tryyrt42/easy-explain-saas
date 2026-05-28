@@ -269,14 +269,9 @@ st.markdown("""
         background-color: rgba(74, 222, 128, 0.18) !important;
     }
 
-    /* === 입력 라벨 (파일/붙여넣기 공통) — 두 모드 폰트·여백 100% 일치 === */
-    .custom-input-label {
-        font-size: 14px !important;
-        font-weight: 400 !important;
-        color: rgb(250, 250, 250) !important;
-        margin-bottom: 0.25rem !important;
-        line-height: 1.4 !important;
-        font-family: "Source Sans Pro", sans-serif !important;
+    /* === 붙여넣기 textarea: 크기 조절 핸들 제거 (요청) === */
+    .stTextArea textarea {
+        resize: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -1053,7 +1048,7 @@ if "include_next_page" not in st.session_state:
 mode_keys = list(PROMPT_TEMPLATES.keys())
 
 with st.expander("문서 & 해석 설정", expanded=True):
-    top_left, top_right = st.columns(2, gap="large", vertical_alignment="top")
+    top_left, top_div, top_right = st.columns([20, 1, 18], gap="small", vertical_alignment="top")
     
     with top_left:
         st.markdown("""
@@ -1090,16 +1085,13 @@ with st.expander("문서 & 해석 설정", expanded=True):
         pasted_text = None
         
         if input_mode == "파일 업로드":
-            st.markdown('<div class="custom-input-label">문서 파일 업로드 (PDF, TXT, DOCX)</div>', unsafe_allow_html=True)
             uploaded_file = st.file_uploader(
                 "문서 파일 업로드 (PDF, TXT, DOCX)", 
                 type=["pdf", "txt", "docx"],
-                label_visibility="collapsed",
                 key="file_uploader_main"
             )
         else:
-            st.markdown('<div class="custom-input-label">문서 텍스트 붙여넣기</div>', unsafe_allow_html=True)
-            # 일반 위젯(text_area) — file_uploader처럼 정상 동작, 레이아웃 안 깨짐
+            # 일반 위젯(text_area) — file_uploader와 동일한 기본 라벨 사용 → 높이·폰트 자동 일치
             # 제출(Ctrl+Enter 또는 포커스 아웃) 시 콜백으로 내용 확정 + 입력칸 비우기
             def _commit_paste():
                 txt = st.session_state.get("pasted_text_main", "")
@@ -1108,14 +1100,21 @@ with st.expander("문서 & 해석 설정", expanded=True):
                 st.session_state["pasted_text_main"] = ""  # 입력칸 비우기
             
             st.text_area(
-                "문서 텍스트 붙여넣기",
+                "문서 텍스트 붙여넣기 (Ctrl+Enter)",
                 height=68,
                 placeholder="여기에 글을 붙여넣고 Ctrl+Enter",
-                label_visibility="collapsed",
                 key="pasted_text_main",
                 on_change=_commit_paste,
             )
             pasted_text = st.session_state.get("paste_committed", "")
+    
+    with top_div:
+        # 좌/우를 나누는 은은한 세로 구분선
+        st.markdown(
+            "<div style='border-left:1px solid rgba(255,255,255,0.12); "
+            "height:100%; min-height:240px; width:1px; margin:0 auto;'></div>",
+            unsafe_allow_html=True
+        )
     
     with top_right:
         with st.container(border=True):
