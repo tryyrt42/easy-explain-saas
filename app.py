@@ -1016,6 +1016,7 @@ def build_prompt(text: str, mode: str) -> str:
   - ❌ "smoke light" (원문엔 "smoky light" 인데 명사로 바꿈)
   - ❌ "tuck under" (원문엔 "tucked it under" 인데 원형으로 바꿈)
   - ❌ "stuff a shirt into" (원문엔 "stuffed a shirt or two into" 인데 단축·원형화)
+  - ❌ `**following before me**` (표제어를 마크다운 볼드/이탤릭 등으로 감싸는 것 금지: `**`, `*`, `__`, `_`, `` ` ``, `~~` 등 일체 사용 X. 강조하려 하지 말 것. 표제어는 plain text 그대로)
 
 🆕 **[자기 검증 단계 — 표 작성 후 반드시 실행]**
 표 작성을 완료했으면, 표를 다시 한 번 훑으면서 각 표제어가 **원문에 토씨 하나 안 틀리고 정확히 존재하는지** 검증해. (`...` 줄임 표제어는 `...` 양쪽 단어가 원문에 있는지 확인.) 만약 원문에서 못 찾는 표제어가 있다면, 그 행을 **원문 그대로의 형태로 수정**해서 다시 작성할 것. 검증을 건너뛰면 사용자가 호버해도 하이라이트가 안 떠서 학습 경험이 망가져.
@@ -1393,6 +1394,25 @@ def build_vocab_search_pattern(term):
     return r'\b' + pattern + r'\b'
 
 
+def _strip_md_emphasis(s):
+    """양 끝의 마크다운 강조 마크업 제거 (**bold**, *italic*, __bold__, _italic_, `code`, ~~s~~).
+    AI가 표제어를 자기 멋대로 강조 마크업으로 감싸는 케이스 방어용."""
+    s = s.strip()
+    # 양 끝 동시 마크업을 반복 제거 (***word*** → **word** → word)
+    while True:
+        stripped = False
+        # 긴 마크업 먼저
+        for marker in ('**', '__', '~~', '*', '_', '`'):
+            if (s.startswith(marker) and s.endswith(marker)
+                    and len(s) > 2 * len(marker)):
+                s = s[len(marker):-len(marker)].strip()
+                stripped = True
+                break
+        if not stripped:
+            break
+    return s
+
+
 def process_response_for_vocab(response_text):
     """마크다운 응답에서 영단어 테이블 찾아 HTML로 변환 + 표제어 리스트 반환.
     🆕 표제어가 곧 원문에 등장한 형태 그대로 → 추측 없이 정확 매칭 가능"""
@@ -1429,11 +1449,14 @@ def process_response_for_vocab(response_text):
             return match.group(0)
         
         # 단어 추출 — 표제어 자체가 원문 형태
+        # 🆕 마크다운 강조 마크업(**..**, *..*, _, ` 등) 자동 제거
         local_terms = []
         for row in body_rows:
             if row and re.search(r'[a-zA-Z]{2,}', row[0]):
-                local_terms.append(row[0])
-                terms.append(row[0])
+                clean = _strip_md_emphasis(row[0])
+                if clean:
+                    local_terms.append(clean)
+                    terms.append(clean)
         
         # HTML 테이블 빌드
         html = ['<table>', '<thead><tr>']
@@ -1444,9 +1467,14 @@ def process_response_for_vocab(response_text):
         for row in body_rows:
             html.append('<tr>')
             for i, cell in enumerate(row):
-                if i == 0 and cell in local_terms:
-                    safe = cell.replace('"', '&quot;')
-                    html.append(f'<td class="vocab-source" data-word="{safe}">{cell}</td>')
+                # 첫 컬럼: 마크다운 강조 제거 후 매칭/표시
+                if i == 0:
+                    clean = _strip_md_emphasis(cell)
+                    if clean in local_terms:
+                        safe = clean.replace('"', '&quot;')
+                        html.append(f'<td class="vocab-source" data-word="{safe}">{clean}</td>')
+                    else:
+                        html.append(f'<td>{clean if clean else cell}</td>')
                 else:
                     html.append(f'<td>{cell}</td>')
             html.append('</tr>')
