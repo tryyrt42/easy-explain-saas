@@ -1413,9 +1413,10 @@ def _strip_md_emphasis(s):
     return s
 
 
-def process_response_for_vocab(response_text):
+def process_response_for_vocab(response_text, source_text=None):
     """마크다운 응답에서 영단어 테이블 찾아 HTML로 변환 + 표제어 리스트 반환.
-    🆕 표제어가 곧 원문에 등장한 형태 그대로 → 추측 없이 정확 매칭 가능"""
+    🆕 표제어가 곧 원문에 등장한 형태 그대로 → 추측 없이 정확 매칭 가능
+    🆕 source_text 주어지면, 원문에서 매칭 안 되는 표제어 자동 제외 (AI 환각 방어)"""
     terms = []
     
     table_pattern = re.compile(
@@ -1450,31 +1451,44 @@ def process_response_for_vocab(response_text):
         
         # 단어 추출 — 표제어 자체가 원문 형태
         # 🆕 마크다운 강조 마크업(**..**, *..*, _, ` 등) 자동 제거
-        local_terms = []
+        candidates = []  # [(clean_term, row_id), ...]
         for row in body_rows:
             if row and re.search(r'[a-zA-Z]{2,}', row[0]):
                 clean = _strip_md_emphasis(row[0])
                 if clean:
-                    local_terms.append(clean)
-                    terms.append(clean)
+                    candidates.append((clean, id(row)))
         
-        # HTML 테이블 빌드
+        # 🆕 원문에서 매칭 안 되는 표제어 제외 (AI 환각 필터)
+        if source_text and candidates:
+            candidate_terms = [c[0] for c in candidates]
+            annotated = annotate_text_with_vocab(source_text, candidate_terms)
+            matched_in_source = set(re.findall(r'data-word="([^"]+)"', annotated))
+            matched_in_source = {m.replace('&quot;', '"') for m in matched_in_source}
+            survivors = [(t, rid) for t, rid in candidates if t in matched_in_source]
+        else:
+            survivors = candidates
+        
+        survivor_row_ids = {rid for _, rid in survivors}
+        local_terms = [t for t, _ in survivors]
+        terms.extend(local_terms)
+        
+        # HTML 테이블 빌드 (필터링된 행은 제외)
         html = ['<table>', '<thead><tr>']
         for h in header_cells:
             html.append(f'<th>{h}</th>')
         html.append('</tr></thead><tbody>')
         
         for row in body_rows:
+            is_vocab_row = bool(row) and bool(re.search(r'[a-zA-Z]{2,}', row[0]))
+            # 영단어 행인데 필터링됐으면 스킵
+            if is_vocab_row and id(row) not in survivor_row_ids:
+                continue
             html.append('<tr>')
             for i, cell in enumerate(row):
-                # 첫 컬럼: 마크다운 강조 제거 후 매칭/표시
-                if i == 0:
+                if i == 0 and is_vocab_row:
                     clean = _strip_md_emphasis(cell)
-                    if clean in local_terms:
-                        safe = clean.replace('"', '&quot;')
-                        html.append(f'<td class="vocab-source" data-word="{safe}">{clean}</td>')
-                    else:
-                        html.append(f'<td>{clean if clean else cell}</td>')
+                    safe = clean.replace('"', '&quot;')
+                    html.append(f'<td class="vocab-source" data-word="{safe}">{clean}</td>')
                 else:
                     html.append(f'<td>{cell}</td>')
             html.append('</tr>')
@@ -1828,7 +1842,16 @@ elif st.session_state["fullscreen_result"]:
             response_raw_fs = st.session_state["interpret_cache"][cache_key]
             is_english_mode_fs = "원서 독해" in selected_mode or "영단어" in selected_mode
             if is_english_mode_fs:
-                response_processed_fs, vocab_terms_fs = process_response_for_vocab(response_raw_fs)
+                # 🆕 원문 재구성 → AI 환각 표제어 필터링용
+                if include_next:
+                    src_text_fs = (
+                        get_page_text(file_ext, pdf_path, page_texts, view_page - 1).strip()
+                        + "\n\n--- 다음 페이지 ---\n\n"
+                        + get_page_text(file_ext, pdf_path, page_texts, view_page).strip()
+                    )
+                else:
+                    src_text_fs = get_page_text(file_ext, pdf_path, page_texts, view_page - 1).strip()
+                response_processed_fs, vocab_terms_fs = process_response_for_vocab(response_raw_fs, source_text=src_text_fs)
                 if vocab_terms_fs:
                     st.markdown(build_vocab_hover_css(vocab_terms_fs), unsafe_allow_html=True)
                 st.markdown(response_processed_fs, unsafe_allow_html=True)
@@ -1893,7 +1916,16 @@ else:
             response_raw = st.session_state["interpret_cache"][cache_key]
             is_english_mode = "원서 독해" in selected_mode or "영단어" in selected_mode
             if is_english_mode:
-                response_processed, vocab_terms = process_response_for_vocab(response_raw)
+                # 🆕 원문 재구성 → AI 환각 표제어 필터링용
+                if include_next:
+                    src_text = (
+                        get_page_text(file_ext, pdf_path, page_texts, view_page - 1).strip()
+                        + "\n\n--- 다음 페이지 ---\n\n"
+                        + get_page_text(file_ext, pdf_path, page_texts, view_page).strip()
+                    )
+                else:
+                    src_text = get_page_text(file_ext, pdf_path, page_texts, view_page - 1).strip()
+                response_processed, vocab_terms = process_response_for_vocab(response_raw, source_text=src_text)
             else:
                 response_processed = response_raw
         
