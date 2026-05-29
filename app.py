@@ -985,7 +985,13 @@ def build_prompt(text: str, mode: str) -> str:
 - ⚠️ **[경고: 임의 요약 절대 금지]** 원문의 길이에 비례하여 한국인 학습자가 모를 수 있는 모든 단어, 구동사(Phrasal Verbs), 전치사구, 고어(Archaic), 비유적 표현, 연어(Collocations)를 **최소 40개에서 100개 사이로 무자비하게 전부 추출**할 것. 단어 추출을 중간에 멈추거나 적당히 요약하면 실패한 결과로 간주함. 사전을 통째로 옮기듯 영혼까지 끌어모아 다 발라낼 것.
 - 단순히 쉬운 단어보다는 한국인 학습자가 헷갈려하는 '전치사의 뉘앙스'나 '다의어의 문맥상 쓰임' 등 가려운 곳을 시원하게 긁어줘야 해.
 - ⚠️ **[절대 규칙]** 표 안의 영단어/숙어는 고유명사가 아닌 이상 **절대 첫 글자를 대문자로 시작하지 마** (전부 무조건 소문자로만 작성할 것. 예: Never mind -> never mind).
-- 표 컬럼: | 표현 (소문자) | 품사 | 문맥상 의미 | 뉘앙스 설명 및 원문 활용 |
+- ⚠️ **[원문 인용 절대 규칙 — 하이라이트 매칭에 직결]** "원문 인용" 컬럼에는 **원문에 실제로 등장한 그대로의 문자열**을 적을 것. 절대 사전형(원형)으로 바꾸지 말 것.
+  - 원문이 "closing in on" 이면 표제어는 "close in on", 원문 인용은 "closing in on"
+  - 원문이 "skirmishes" 면 표제어는 "skirmish", 원문 인용은 "skirmishes"
+  - 원문이 "picked the book up" 이면 표제어는 "pick up", 원문 인용은 "picked the book up" (사이 단어 포함)
+  - 원문이 "fragile cease-fire" 같은 연어로 묶여 있어도, 표제어가 "fragile" 하나면 원문 인용은 "fragile" 만 (그 단어 자체로만 추출). 단, "fragile cease-fire" 자체를 연어로 추출했다면 원문 인용은 "fragile cease-fire".
+  - 대소문자·하이픈·구두점은 원문 그대로 보존
+- 표 컬럼: | 표현 (소문자) | 원문 인용 | 품사 | 문맥상 의미 | 뉘앙스 설명 및 원문 활용 |
 
 ### 3️⃣ 🧠 구문 분석 & 원어민의 표현법
 
@@ -1357,8 +1363,10 @@ def build_vocab_search_pattern(term):
 
 
 def process_response_for_vocab(response_text):
-    """마크다운 응답에서 영단어 테이블 찾아 HTML로 변환 + 단어 리스트 반환"""
-    terms = []
+    """마크다운 응답에서 영단어 테이블 찾아 HTML로 변환 + 매칭 정보 반환.
+    🆕 '원문 인용' 컬럼이 있으면 그 정확한 문자열을 매칭에 사용 (사전형 추측 X)
+    반환: (new_text, vocab_entries) where vocab_entries = [{'term', 'quote'}, ...]"""
+    vocab_entries = []
     
     table_pattern = re.compile(
         r'(\|[^\n]+\|\n)'             # 헤더
@@ -1390,23 +1398,41 @@ def process_response_for_vocab(response_text):
         if english_first < len(body_rows) * 0.5:
             return match.group(0)
         
-        # 단어 추출
-        local_terms = []
+        # 🆕 "원문 인용" 컬럼 위치 찾기 (있으면 정확 매칭, 없으면 fallback)
+        quote_col_idx = None
+        for i, h in enumerate(header_cells):
+            if '원문' in h or '인용' in h:
+                quote_col_idx = i
+                break
+        
+        # 단어 추출 + 원문 인용 같이
+        local_terms_set = set()
         for row in body_rows:
             if row and re.search(r'[a-zA-Z]{2,}', row[0]):
-                local_terms.append(row[0])
-                terms.append(row[0])
+                term = row[0]
+                quote = ''
+                if quote_col_idx is not None and quote_col_idx < len(row):
+                    q = row[quote_col_idx].strip()
+                    # 자리표시자 제외
+                    if q and q not in {'-', '—', '–', 'n/a', 'N/A', ''}:
+                        quote = q
+                vocab_entries.append({'term': term, 'quote': quote})
+                local_terms_set.add(term)
         
-        # HTML 테이블 빌드
+        # HTML 테이블 빌드 (원문 인용 컬럼은 화면에서 숨김 — 매칭용으로만 사용)
         html = ['<table>', '<thead><tr>']
-        for h in header_cells:
+        for i, h in enumerate(header_cells):
+            if i == quote_col_idx:
+                continue
             html.append(f'<th>{h}</th>')
         html.append('</tr></thead><tbody>')
         
         for row in body_rows:
             html.append('<tr>')
             for i, cell in enumerate(row):
-                if i == 0 and cell in local_terms:
+                if i == quote_col_idx:
+                    continue
+                if i == 0 and cell in local_terms_set:
                     safe = cell.replace('"', '&quot;')
                     html.append(f'<td class="vocab-source" data-word="{safe}">{cell}</td>')
                 else:
@@ -1417,18 +1443,33 @@ def process_response_for_vocab(response_text):
         return '\n\n' + ''.join(html) + '\n\n'
     
     new_text = table_pattern.sub(replace_table, response_text)
-    return new_text, terms
+    return new_text, vocab_entries
 
 
-def annotate_text_with_vocab(text, terms):
-    """원본 텍스트에서 영단어를 <span class='vocab-mark'>로 감싸기"""
-    if not terms:
+def annotate_text_with_vocab(text, vocab_entries):
+    """원본 텍스트에서 영단어를 <span class='vocab-mark'>로 감싸기.
+    🆕 entry['quote']가 있으면 그 정확한 문자열로 매칭 (literal),
+       없으면 사전형 + 인플렉션 패턴으로 fallback."""
+    if not vocab_entries:
         return text
     
     matches = []
-    for term in terms:
+    for entry in vocab_entries:
+        # 하위호환: 문자열 list가 들어와도 처리
+        if isinstance(entry, str):
+            term, quote = entry, ''
+        else:
+            term = entry.get('term', '')
+            quote = entry.get('quote', '')
+        if not term:
+            continue
         try:
-            pattern = build_vocab_search_pattern(term)
+            if quote:
+                # 🆕 AI가 알려준 원문 그대로 정확 매칭 (대소문자 무시)
+                pattern = r'\b' + re.escape(quote) + r'\b'
+            else:
+                # Fallback: 사전형으로 인플렉션/분리형 패턴 빌드
+                pattern = build_vocab_search_pattern(term)
             for m in re.finditer(pattern, text, re.IGNORECASE):
                 matches.append((m.start(), m.end(), term, m.group(0)))
         except re.error:
@@ -1455,14 +1496,18 @@ def annotate_text_with_vocab(text, terms):
     return ''.join(result)
 
 
-def build_vocab_hover_css(terms):
+def build_vocab_hover_css(vocab_entries):
     """CSS :has() 선택자로 양방향 호버 하이라이트 (JS 불필요)"""
-    if not terms:
+    if not vocab_entries:
         return ''
     rules = []
     seen = set()
-    for term in terms:
-        if term in seen:
+    for entry in vocab_entries:
+        if isinstance(entry, str):
+            term = entry
+        else:
+            term = entry.get('term', '')
+        if not term or term in seen:
             continue
         seen.add(term)
         safe = term.replace('\\', '\\\\').replace('"', '\\"')
