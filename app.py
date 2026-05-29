@@ -261,7 +261,7 @@ st.markdown("""
         box-shadow: 0 0 0 1px #fbbf24;
     }
     .vocab-source {
-        cursor: help !important;
+        cursor: default !important;
         transition: background-color 0.15s !important;
         position: relative;
     }
@@ -1295,10 +1295,41 @@ file_ext = st.session_state.get("file_ext", "pdf")
 # 📚 영단어 학습 모드 — 호버 하이라이트 (서버사이드 처리 + CSS :has())
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+def _word_inflect_pattern(word, suffix):
+    """단어 1개에 대한 인플렉션 패턴 — silent-e와 y→ies 변환까지 처리.
+    예: close → close/closes/closed + closing/closer (e 빠진 형태)
+        try → try/tries/tried (y → ies/ied 변환)"""
+    base_pat = re.escape(word) + suffix
+    alternatives = [base_pat]
+    # silent-e: 자음 + e로 끝나면 → e 빼고 ing/ed/er/est/ies/ied 시도
+    # 예: close → closing, write → writing, take → taking
+    if len(word) > 2 and word.endswith('e') and word[-2].lower() not in 'aeiou':
+        no_e = re.escape(word[:-1])
+        alternatives.append(no_e + r'(?:ing|ed|er|est|ies|ied)')
+    # y → ies/ied: 자음 + y로 끝나면 → y 빼고 ies/ied/ier/iest 시도
+    # 예: try → tries/tried, study → studies/studied
+    if len(word) > 2 and word.endswith('y') and word[-2].lower() not in 'aeiou':
+        no_y = re.escape(word[:-1])
+        alternatives.append(no_y + r'(?:ies|ied|ier|iest|ying)')
+    if len(alternatives) > 1:
+        return '(?:' + '|'.join(alternatives) + ')'
+    return alternatives[0]
+
+
 def build_vocab_search_pattern(term):
-    """영단어 매칭용 정규식 (인플렉션 + 'tuck ~ under' 패턴 지원)
+    """영단어 매칭용 정규식
     - 일반 접미사: s, es, ed, ing, er, est, ly, ies, ied, n
-    - 자음 중복: [자음] + ing/ed/er (quit→quitting, stop→stopped, run→running 등)"""
+    - 자음 중복: stop→stopped, run→running 등
+    - 🆕 silent-e: close→closing, write→writing
+    - 🆕 y→ies: try→tries, study→studied
+    - 🆕 분리형 구동사: "pick up" 패턴이 "pick the book up"도 매칭
+    - tilde: 'tuck ~ under' 같은 분리 표기 지원"""
+    # 분리 가능한 영어 구동사 파티클
+    PARTICLES = {
+        'up', 'down', 'in', 'out', 'on', 'off', 'away', 'back', 'over',
+        'through', 'around', 'apart', 'together', 'forward', 'across',
+        'along', 'about', 'by', 'ahead', 'aside', 'behind', 'under',
+    }
     suffix = (
         r'(?:s|es|ed|ing|er|est|d|ly|ies|ied|n'
         r'|[bcdfghjklmnpqrstvwxyz](?:ing|ed|er)'
@@ -1309,11 +1340,19 @@ def build_vocab_search_pattern(term):
         sub_patterns = []
         for part in parts:
             words = part.split()
-            sub_patterns.append(r'\s+'.join(re.escape(w) + suffix for w in words))
+            sub_patterns.append(r'\s+'.join(_word_inflect_pattern(w, suffix) for w in words))
         pattern = r'[^\n.!?]{1,50}?'.join(sub_patterns)
     else:
         words = term.split()
-        pattern = r'\s+'.join(re.escape(w) + suffix for w in words)
+        # 🆕 2단어 구동사 (동사 + 파티클) → 분리형도 매칭
+        if len(words) == 2 and words[1].lower() in PARTICLES:
+            sep = r'(?:\s+[^\s\n.!?]+){0,4}?\s+'
+            pattern = (
+                _word_inflect_pattern(words[0], suffix) + sep
+                + _word_inflect_pattern(words[1], suffix)
+            )
+        else:
+            pattern = r'\s+'.join(_word_inflect_pattern(w, suffix) for w in words)
     return r'\b' + pattern + r'\b'
 
 
