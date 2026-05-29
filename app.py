@@ -334,6 +334,112 @@ GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
 MODEL_NAME = "gemini-3.1-flash-lite" 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 🔑 Gemini API 키 풀 (라운드로빈 + cooldown 자동 fallback)
+# - 단일 키: GEMINI_API_KEY (기존 호환)
+# - 다중 키: GEMINI_API_KEYS = "key1,key2,key3" (콤마 구분)
+# - 둘 다 있으면 다중 키 우선
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+import threading
+import time as _time_mod
+
+def _init_gemini_keys():
+    """Secrets에서 키들을 읽어서 풀 구성"""
+    multi = get_secret("GEMINI_API_KEYS", "")
+    if multi:
+        keys = [k.strip() for k in multi.split(",") if k.strip()]
+    elif GEMINI_API_KEY:
+        keys = [GEMINI_API_KEY]
+    else:
+        keys = []
+    return keys
+
+_GEMINI_KEYS = _init_gemini_keys()
+_GEMINI_KEY_IDX = 0                  # round-robin 인덱스
+_GEMINI_COOLDOWN = {}                # {key: cooldown_until_timestamp}
+_GEMINI_LOCK = threading.Lock()      # 키 선택 + Gemini 호출 보호 (configure는 global state)
+
+
+def _pick_available_key():
+    """다음 사용 가능한 키 선택 (cooldown 회피). 호출자가 lock 보유 상태여야 함.
+    반환: 키 문자열 or None (전부 cooldown 중)"""
+    global _GEMINI_KEY_IDX
+    if not _GEMINI_KEYS:
+        return None
+    now = _time_mod.time()
+    n = len(_GEMINI_KEYS)
+    for _ in range(n):
+        key = _GEMINI_KEYS[_GEMINI_KEY_IDX]
+        _GEMINI_KEY_IDX = (_GEMINI_KEY_IDX + 1) % n
+        if _GEMINI_COOLDOWN.get(key, 0) <= now:
+            return key
+    return None
+
+
+def _mark_key_cooldown(key, seconds=300):
+    """키를 cooldown 풀에 넣음. 기본 5분 (분당 한도 회복 시간 + 여유)"""
+    _GEMINI_COOLDOWN[key] = _time_mod.time() + seconds
+
+
+def call_gemini_with_pool(prompt, model_name=MODEL_NAME, max_output_tokens=16384):
+    """키 풀에서 자동 선택해서 Gemini 호출.
+    429/quota 에러면 그 키를 cooldown에 넣고 다음 키로 자동 재시도.
+    전부 실패하면 RuntimeError."""
+    if not _GEMINI_KEYS:
+        raise RuntimeError("Gemini API 키가 설정되지 않았습니다. Secrets에 GEMINI_API_KEY 또는 GEMINI_API_KEYS를 등록해주세요.")
+    
+    n = len(_GEMINI_KEYS)
+    last_error = None
+    for attempt in range(n):
+        # 키 선택 + Gemini 호출을 하나의 critical section으로 묶음
+        # (google-generativeai SDK는 genai.configure가 global state라
+        #  여러 키 동시 사용 시 race condition 위험. 직렬화로 안전 확보)
+        with _GEMINI_LOCK:
+            key = _pick_available_key()
+            if key is None:
+                break  # 전부 cooldown
+            try:
+                genai.configure(api_key=key)
+                model = genai.GenerativeModel(
+                    model_name,
+                    generation_config=genai.types.GenerationConfig(
+                        max_output_tokens=max_output_tokens
+                    )
+                )
+                return model.generate_content(prompt)
+            except Exception as e:
+                err_str = str(e).lower()
+                last_error = e
+                # quota / rate limit 류면 cooldown 후 다음 키 시도
+                rate_limit_signals = (
+                    '429', 'quota', 'rate limit', 'rate-limit',
+                    'resource_exhausted', 'resourceexhausted', 'too many requests'
+                )
+                if any(s in err_str for s in rate_limit_signals):
+                    _mark_key_cooldown(key, seconds=300)
+                    continue
+                # 기타 에러 — 일시적일 수 있으니 다음 키 시도하되, 짧은 cooldown
+                _mark_key_cooldown(key, seconds=30)
+                continue
+    
+    if last_error:
+        raise last_error
+    raise RuntimeError(
+        "모든 Gemini 키가 일시적으로 사용 불가합니다 (cooldown 중). 1~5분 후 다시 시도해주세요."
+    )
+
+
+def get_gemini_pool_status():
+    """디버그용: 현재 풀 상태 반환 (관리자 페이지에서 보여줄 수 있음)"""
+    now = _time_mod.time()
+    return [
+        {
+            "key_preview": k[:10] + "..." + k[-4:] if len(k) > 14 else "***",
+            "cooldown_remaining_sec": max(0, int(_GEMINI_COOLDOWN.get(k, 0) - now)),
+        }
+        for k in _GEMINI_KEYS
+    ]
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 💾 외부 영속 캐시 (F5 새로고침에도 살아남음)
 # - @st.cache_resource는 컨테이너 라이프타임 동안 같은 dict 인스턴스 반환
 # - 세션 state가 날아가도 이 dict는 유지됨
@@ -1696,19 +1802,14 @@ def render_pages_in_container(pages_to_show, pdf_path, page_texts, total_pages, 
 
 
 def run_interpretation(text, mode, cache_key, pages_used=1):
-    if GEMINI_API_KEY == "":
-        st.error("🔑 Secrets 세팅에 GEMINI_API_KEY를 정상 등록해 주세요.")
+    if not _GEMINI_KEYS:
+        st.error("🔑 Secrets 세팅에 GEMINI_API_KEY 또는 GEMINI_API_KEYS를 등록해 주세요.")
         return False
     if not text:
         st.warning("⚠️ 추출 가능한 텍스트가 없습니다.")
         return False
     
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(
-            MODEL_NAME, 
-            generation_config=genai.types.GenerationConfig(max_output_tokens=16384)
-        )
         current_user = st.session_state.get("user", {})
         is_admin = (current_user.get('plan_type') == 'ADMIN')
         
@@ -1721,7 +1822,8 @@ def run_interpretation(text, mode, cache_key, pages_used=1):
         spinner_msg = f"🧠 [ADMIN] {pages_used}페이지 분석 중..." if is_admin else f"🧠 {pages_used}페이지 분석 중..."
         with st.spinner(spinner_msg):
             gc.collect()  # 🆕 호출 직전 메모리 정리 (대용량 PDF 캐시와 겹칠 때 OOM 방지)
-            response = model.generate_content(build_prompt(text, mode))
+            # 🆕 키 풀 사용 (자동 fallback)
+            response = call_gemini_with_pool(build_prompt(text, mode))
         
         if not is_admin:
             new_used = current_user.get('used_pages', 0) + pages_used
@@ -1731,7 +1833,12 @@ def run_interpretation(text, mode, cache_key, pages_used=1):
         st.session_state["interpret_cache"][cache_key] = response.text
         return True
     except Exception as e:
-        st.error(f"❌ 오류: {e}")
+        err_msg = str(e).lower()
+        # 사용자 친화적 메시지
+        if any(s in err_msg for s in ['quota', 'rate limit', '429', 'resource_exhausted', 'cooldown']):
+            st.error("⏰ 일시적으로 사용량이 많습니다. 1~5분 후 다시 시도해주세요.")
+        else:
+            st.error(f"❌ 오류: {e}")
         return False
 
 # ============================================================
