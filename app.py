@@ -1316,11 +1316,11 @@ def _word_inflect_pattern(word, suffix):
         try → try/tries/tried (y → ies/ied 변환)"""
     base_pat = re.escape(word) + suffix
     alternatives = [base_pat]
-    # silent-e: 자음 + e로 끝나면 → e 빼고 ing/ed/er/est/ies/ied 시도
-    # 예: close → closing, write → writing, take → taking
+    # silent-e: 자음 + e로 끝나면 → e 빼고 vowel-suffix 시도
+    # 🆕 y 추가: smoke→smoky, shine→shiny, juice→juicy 같은 형용사 파생까지 커버
     if len(word) > 2 and word.endswith('e') and word[-2].lower() not in 'aeiou':
         no_e = re.escape(word[:-1])
-        alternatives.append(no_e + r'(?:ing|ed|er|est|ies|ied)')
+        alternatives.append(no_e + r'(?:ing|ed|er|est|ies|ied|y)')
     # y → ies/ied: 자음 + y로 끝나면 → y 빼고 ies/ied/ier/iest 시도
     # 예: try → tries/tried, study → studies/studied
     if len(word) > 2 and word.endswith('y') and word[-2].lower() not in 'aeiou':
@@ -1440,36 +1440,51 @@ def annotate_text_with_vocab(text, terms):
     """원본 텍스트에서 영단어를 <span class='vocab-mark'>로 감싸기.
     🆕 표제어 = 원문 형태 그대로 → 단순 literal 매칭 (대소문자 무시)
     🆕 표제어에 '...' / '…' / '~' 가 있으면 그 자리에 임의 단어들 허용
-       (예: 'stuffed... into' → 'stuffed a shirt or two into' 매칭)"""
+    🆕 literal로 못 잡으면 인플렉션 패턴으로 fallback (AI 오타·사전형 보정)
+       예: 표제어 "smoke" + 원문 "smoky" 매칭됨"""
     if not terms:
         return text
     
-    # ... 또는 … 또는 ~ : "사이에 임의 단어들" 마커
     gap_re = re.compile(r'\s*(?:\.{3}|…|~)\s*')
+    # 인플렉션 fallback용 suffix
+    inflect_suffix = (
+        r'(?:s|es|ed|ing|er|est|d|ly|ies|ied|n'
+        r'|[bcdfghjklmnpqrstvwxyz](?:ing|ed|er)'
+        r')?'
+    )
+    
+    def _build_pattern(parts, use_inflection=False):
+        """parts: 단어 묶음 리스트 (...로 나눠진 조각들). use_inflection=True면 단어별 인플렉션 적용"""
+        if use_inflection:
+            sub_patterns = []
+            for part in parts:
+                words = part.split()
+                sub_patterns.append(r'\s+'.join(_word_inflect_pattern(w, inflect_suffix) for w in words))
+        else:
+            sub_patterns = [re.escape(p) for p in parts]
+        if len(parts) >= 2:
+            between = r'\s+[^\n.!?]+?\s+'
+            inner = between.join(sub_patterns)
+        else:
+            inner = sub_patterns[0]
+        return r'(?<![A-Za-z0-9])' + inner + r'(?![A-Za-z0-9])'
     
     matches = []
     for term in terms:
         if not term:
             continue
+        parts = [p.strip() for p in gap_re.split(term) if p.strip()]
+        if not parts:
+            continue
         try:
-            # gap 마커로 분리
-            parts = [p.strip() for p in gap_re.split(term) if p.strip()]
-            if len(parts) >= 2:
-                # 사이에 단어(들) 허용 — 최소 1단어, 문장 경계 안 넘게, lazy로 최단 매칭
-                between = r'\s+[^\n.!?]+?\s+'
-                pattern = (
-                    r'(?<![A-Za-z0-9])'
-                    + between.join(re.escape(p) for p in parts)
-                    + r'(?![A-Za-z0-9])'
-                )
-            else:
-                # 일반: 표제어 그대로 literal 매칭
-                pattern = (
-                    r'(?<![A-Za-z0-9])'
-                    + re.escape(term)
-                    + r'(?![A-Za-z0-9])'
-                )
-            for m in re.finditer(pattern, text, re.IGNORECASE):
+            # 1차: literal 정확 매칭
+            pat = _build_pattern(parts, use_inflection=False)
+            found = list(re.finditer(pat, text, re.IGNORECASE))
+            # 2차: 못 찾으면 인플렉션 fallback (AI 오타·사전형 보정)
+            if not found:
+                pat = _build_pattern(parts, use_inflection=True)
+                found = list(re.finditer(pat, text, re.IGNORECASE))
+            for m in found:
                 matches.append((m.start(), m.end(), term, m.group(0)))
         except re.error:
             continue
