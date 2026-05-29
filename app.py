@@ -1334,18 +1334,19 @@ file_ext = st.session_state.get("file_ext", "pdf")
 def _word_inflect_pattern(word, suffix):
     """단어 1개에 대한 인플렉션 패턴 — silent-e와 y→ies 변환까지 처리.
     예: close → close/closes/closed + closing/closer (e 빠진 형태)
-        try → try/tries/tried (y → ies/ied 변환)"""
-    base_pat = re.escape(word) + suffix
+        try → try/tries/tried (y → ies/ied 변환)
+    타이포그래픽 변형(따옴표·대시)도 동등하게 매칭."""
+    base_pat = _re_escape_with_typo(word) + suffix
     alternatives = [base_pat]
     # silent-e: 자음 + e로 끝나면 → e 빼고 vowel-suffix 시도
     # 🆕 y 추가: smoke→smoky, shine→shiny, juice→juicy 같은 형용사 파생까지 커버
     if len(word) > 2 and word.endswith('e') and word[-2].lower() not in 'aeiou':
-        no_e = re.escape(word[:-1])
+        no_e = _re_escape_with_typo(word[:-1])
         alternatives.append(no_e + r'(?:ing|ed|er|est|ies|ied|y)')
     # y → ies/ied: 자음 + y로 끝나면 → y 빼고 ies/ied/ier/iest 시도
     # 예: try → tries/tried, study → studies/studied
     if len(word) > 2 and word.endswith('y') and word[-2].lower() not in 'aeiou':
-        no_y = re.escape(word[:-1])
+        no_y = _re_escape_with_typo(word[:-1])
         alternatives.append(no_y + r'(?:ies|ied|ier|iest|ying)')
     if len(alternatives) > 1:
         return '(?:' + '|'.join(alternatives) + ')'
@@ -1457,6 +1458,49 @@ def process_response_for_vocab(response_text):
     return new_text, terms
 
 
+def _re_escape_with_typo(s):
+    """re.escape의 변형 — 따옴표·아포스트로피·대시의 다양한 형태를 동등하게 취급.
+    🆕 하이픈은 다른 하이픈류 / 공백 / 아예 없음으로도 매칭
+       (everlasting ↔ ever-lasting ↔ ever lasting, ceasefire ↔ cease-fire 등)
+    PDF/ebook에서 흔히 발생: don't (U+2019) vs don't (U+0027) 같은 미스매치 해결."""
+    result = []
+    for char in s:
+        if char in "'\u2019\u2018\u02BC":   # 단일 따옴표 / 아포스트로피 변형 전부
+            result.append("['\u2019\u2018\u02BC]")
+        elif char in '"\u201C\u201D':         # 이중 따옴표 변형
+            result.append('["\u201C\u201D]')
+        elif char in '-\u2013\u2014\u2212':   # 하이픈 / en-dash / em-dash / 마이너스
+            # 🆕 하이픈이 있어도 / 없어도 / 공백이어도 다 매칭
+            result.append('[\\s\\-\u2013\u2014\u2212]*')
+        else:
+            result.append(re.escape(char))
+    return ''.join(result)
+
+
+def _build_compound_fuzzy_pattern(term):
+    """합성어 변형 매칭용 패턴 (3차 fallback).
+    표제어에 하이픈/공백이 없을 때 원문에는 있는 경우를 위해, 내부 위치에
+    옵셔널 하이픈/공백을 끼울 수 있는 변형들을 OR로 묶음.
+    예: 'everlasting' 표제어 → 원문 'ever-lasting' or 'ever lasting' 매칭
+    안전장치: 6자+ 단어만, 양쪽 분할이 3자+, 이미 분리 마커 있으면 적용 안 함."""
+    # 이미 분리 마커가 있거나 너무 짧으면 스킵
+    if any(c in term for c in ' -\u2013\u2014\u2212\u2026~'):
+        return None
+    if '...' in term or len(term) < 6:
+        return None
+    variants = [_re_escape_with_typo(term)]
+    for i in range(3, len(term) - 2):
+        if term[i-1].isalpha() and term[i].isalpha():
+            variants.append(
+                _re_escape_with_typo(term[:i])
+                + '[\\s\\-\u2013\u2014\u2212]+'
+                + _re_escape_with_typo(term[i:])
+            )
+    if len(variants) <= 1:
+        return None
+    return r'(?<![A-Za-z0-9])(?:' + '|'.join(variants) + r')(?![A-Za-z0-9])'
+
+
 def annotate_text_with_vocab(text, terms):
     """원본 텍스트에서 영단어를 <span class='vocab-mark'>로 감싸기.
     🆕 표제어 = 원문 형태 그대로 → 단순 literal 매칭 (대소문자 무시)
@@ -1482,7 +1526,8 @@ def annotate_text_with_vocab(text, terms):
                 words = part.split()
                 sub_patterns.append(r'\s+'.join(_word_inflect_pattern(w, inflect_suffix) for w in words))
         else:
-            sub_patterns = [re.escape(p) for p in parts]
+            # 타이포그래픽 변형(따옴표·대시) 동등 매칭
+            sub_patterns = [_re_escape_with_typo(p) for p in parts]
         if len(parts) >= 2:
             between = r'\s+[^\n.!?]+?\s+'
             inner = between.join(sub_patterns)
@@ -1505,6 +1550,11 @@ def annotate_text_with_vocab(text, terms):
             if not found:
                 pat = _build_pattern(parts, use_inflection=True)
                 found = list(re.finditer(pat, text, re.IGNORECASE))
+            # 3차: 합성어 fuzzy (everlasting ↔ ever-lasting 같은 변형)
+            if not found and len(parts) == 1:
+                fuzzy = _build_compound_fuzzy_pattern(parts[0])
+                if fuzzy:
+                    found = list(re.finditer(fuzzy, text, re.IGNORECASE))
             for m in found:
                 matches.append((m.start(), m.end(), term, m.group(0)))
         except re.error:
