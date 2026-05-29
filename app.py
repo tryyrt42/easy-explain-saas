@@ -990,12 +990,15 @@ def build_prompt(text: str, mode: str) -> str:
   - 원문 "couriers" → 표제어 "couriers" (✗ "courier")
   - 원문 "closing in on" → 표제어 "closing in on" (✗ "close in on")
   - 원문 "skirmishes" → 표제어 "skirmishes" (✗ "skirmish")
-  - 원문 "tucked it under" → 표제어 "tucked it under" (✗ "tuck under")
-  - 원문 "picked the book up" → 표제어 "picked the book up" (✗ "pick up")
-  - 원문 "felt no political pressure to" → 표제어 "felt no political pressure to"
   - 원문 "fragile cease-fire" 연어로 묶어 추출 → 표제어 "fragile cease-fire"
   - 대소문자·하이픈·구두점은 원문 그대로 보존. 단, **양 끝의 마침표/쉼표/콜론 같은 문장 부호는 제외** (단어 내부 하이픈·아포스트로피는 유지)
   - 예외: 표제어가 문장 첫 단어라 대문자로 시작했다면 그것만 **소문자로** 적기 (가독성)
+  - 🆕 **사이에 단어가 끼는 구동사·표현은 `...` 으로 줄여서 적기 (권장)**
+     긴 구절을 통째로 적기 부담스러우면 사이 부분을 `...`로 줄임:
+     - 원문 "stuffed a shirt or two into" → 표제어 "stuffed... into" (또는 통째로 적어도 OK)
+     - 원문 "tucked it under" → 표제어 "tucked... under" (또는 "tucked it under")
+     - 원문 "picked the book up" → 표제어 "picked... up" (또는 통째로 "picked the book up")
+     `...` 자리에 어떤 단어들이 와도 매칭되니, 너무 길어지는 경우만 `...` 사용. 짧으면 그냥 통째로.
 - 학습자 친화 안내: 첫 컬럼이 변형된 형태라 어색할 수 있는데, 그건 의도된 거야. 호버 시 원문에서 정확히 매칭되도록 한 거니까 그대로 둘 것.
 - 표 컬럼: | 표현 (원문 형태) | 품사 | 문맥상 의미 | 뉘앙스 설명 및 원문 활용 |
 
@@ -1435,25 +1438,37 @@ def process_response_for_vocab(response_text):
 
 def annotate_text_with_vocab(text, terms):
     """원본 텍스트에서 영단어를 <span class='vocab-mark'>로 감싸기.
-    🆕 표제어 = 원문 형태 그대로 → 단순 literal 매칭 (대소문자 무시)"""
+    🆕 표제어 = 원문 형태 그대로 → 단순 literal 매칭 (대소문자 무시)
+    🆕 표제어에 '...' / '…' / '~' 가 있으면 그 자리에 임의 단어들 허용
+       (예: 'stuffed... into' → 'stuffed a shirt or two into' 매칭)"""
     if not terms:
         return text
+    
+    # ... 또는 … 또는 ~ : "사이에 임의 단어들" 마커
+    gap_re = re.compile(r'\s*(?:\.{3}|…|~)\s*')
     
     matches = []
     for term in terms:
         if not term:
             continue
         try:
-            # 표제어가 곧 원문 형태이므로 그대로 검색 (대소문자만 무시)
-            # \b 사용 시 하이픈 단어/숫자 경계 문제로 false negative 가능
-            # → 양 끝의 알파벳/숫자/하이픈 경계만 부드럽게 체크
-            # 양옆이 알파벳/숫자면 매칭 안 함 (단어 도중에 끼는 것 방지)
-            # 양옆이 공백/구두점이면 OK
-            pattern = (
-                r'(?<![A-Za-z0-9])'   # 앞이 단어문자 아님 (단어 시작)
-                + re.escape(term)
-                + r'(?![A-Za-z0-9])'  # 뒤가 단어문자 아님 (단어 끝)
-            )
+            # gap 마커로 분리
+            parts = [p.strip() for p in gap_re.split(term) if p.strip()]
+            if len(parts) >= 2:
+                # 사이에 단어(들) 허용 — 최소 1단어, 문장 경계 안 넘게, lazy로 최단 매칭
+                between = r'\s+[^\n.!?]+?\s+'
+                pattern = (
+                    r'(?<![A-Za-z0-9])'
+                    + between.join(re.escape(p) for p in parts)
+                    + r'(?![A-Za-z0-9])'
+                )
+            else:
+                # 일반: 표제어 그대로 literal 매칭
+                pattern = (
+                    r'(?<![A-Za-z0-9])'
+                    + re.escape(term)
+                    + r'(?![A-Za-z0-9])'
+                )
             for m in re.finditer(pattern, text, re.IGNORECASE):
                 matches.append((m.start(), m.end(), term, m.group(0)))
         except re.error:
