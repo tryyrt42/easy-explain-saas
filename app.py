@@ -985,20 +985,41 @@ def build_prompt(text: str, mode: str) -> str:
 - ⚠️ **[경고: 임의 요약 절대 금지]** 원문의 길이에 비례하여 한국인 학습자가 모를 수 있는 모든 단어, 구동사(Phrasal Verbs), 전치사구, 고어(Archaic), 비유적 표현, 연어(Collocations)를 **최소 40개에서 100개 사이로 무자비하게 전부 추출**할 것. 단어 추출을 중간에 멈추거나 적당히 요약하면 실패한 결과로 간주함. 사전을 통째로 옮기듯 영혼까지 끌어모아 다 발라낼 것.
 - 단순히 쉬운 단어보다는 한국인 학습자가 헷갈려하는 '전치사의 뉘앙스'나 '다의어의 문맥상 쓰임' 등 가려운 곳을 시원하게 긁어줘야 해.
 - ⚠️ **[표제어 작성 절대 규칙 — 하이라이트 매칭에 직결되니 반드시 지킬 것]**
-  표제어는 **원문에 실제로 등장한 형태 그대로** 적을 것. 절대 사전형(원형)으로 변형하지 말 것.
-  사전형 변환은 학습자가 알아서 추론하므로 신경 쓰지 말고, 원문 형태 보존이 최우선.
-  - 원문 "couriers" → 표제어 "couriers" (✗ "courier")
-  - 원문 "closing in on" → 표제어 "closing in on" (✗ "close in on")
-  - 원문 "skirmishes" → 표제어 "skirmishes" (✗ "skirmish")
-  - 원문 "fragile cease-fire" 연어로 묶어 추출 → 표제어 "fragile cease-fire"
-  - 대소문자·하이픈·구두점은 원문 그대로 보존. 단, **양 끝의 마침표/쉼표/콜론 같은 문장 부호는 제외** (단어 내부 하이픈·아포스트로피는 유지)
-  - 예외: 표제어가 문장 첫 단어라 대문자로 시작했다면 그것만 **소문자로** 적기 (가독성)
-  - 🆕 **사이에 단어가 끼는 구동사·표현은 `...` 으로 줄여서 적기 (권장)**
-     긴 구절을 통째로 적기 부담스러우면 사이 부분을 `...`로 줄임:
-     - 원문 "stuffed a shirt or two into" → 표제어 "stuffed... into" (또는 통째로 적어도 OK)
-     - 원문 "tucked it under" → 표제어 "tucked... under" (또는 "tucked it under")
-     - 원문 "picked the book up" → 표제어 "picked... up" (또는 통째로 "picked the book up")
-     `...` 자리에 어떤 단어들이 와도 매칭되니, 너무 길어지는 경우만 `...` 사용. 짧으면 그냥 통째로.
+  
+  🔥 **핵심 원칙**: 표제어는 원문에서 **그대로 복사해서 붙여넣은 것**처럼 적어. 한 글자라도 바꾸면 안 돼. 사전형 변환·표준화·재구성·재배열 일체 금지. 원문에 실제로 등장한 그 글자 시퀀스 그대로.
+  
+  📋 **체크리스트 (표제어 적기 전에 매번 확인할 것)**:
+  1. 이 표제어 그대로 원문에서 Ctrl+F로 검색했을 때 반드시 찾을 수 있어야 한다
+  2. 동사·형용사·부사 형태 변환 금지 (carelessly를 careless로 바꾸지 마, smoky를 smoke로 바꾸지 마)
+  3. 단수·복수 변환 금지 (couriers를 courier로 바꾸지 마, skirmishes를 skirmish로 바꾸지 마)
+  4. 시제 변환 금지 (tucked를 tuck으로 바꾸지 마, closed를 close로 바꾸지 마)
+  5. 어순 변환 금지 (원문이 "set the table for"면 그대로, "set for the table"로 재배열 금지)
+  6. 양 끝의 마침표·쉼표·콜론만 제외, 단어 내부 하이픈·아포스트로피는 유지
+  
+  ✅ **올바른 예시 (원문 그대로)**:
+  - 원문 "couriers" → 표제어 "couriers" (절대 "courier" X)
+  - 원문 "closing in on" → 표제어 "closing in on" (절대 "close in on" X)
+  - 원문 "skirmishes" → 표제어 "skirmishes" (절대 "skirmish" X)
+  - 원문 "a careless look" → 표제어 "careless look" 또는 "a careless look" (절대 "carelessly look" X — 다른 단어를 섞어넣지 마)
+  - 원문 "a smoky light" → 표제어 "smoky light" 또는 "smoky" (절대 "smoke light" X)
+  - 원문 "fragile cease-fire" → 표제어 "fragile cease-fire"
+  - 원문이 문장 첫 단어 "Quitting" → 표제어 "Quitting"
+  
+  🆕 **사이에 단어가 끼는 구동사·표현은 `...` 으로 줄여 적기 (권장)**:
+  긴 구절을 통째로 적기 부담스러우면 사이를 `...`로 줄임. 단, `...` 양쪽 단어는 원문 그대로:
+  - 원문 "stuffed a shirt or two into" → "stuffed... into" (또는 통째로)
+  - 원문 "tucked it under" → "tucked... under" (또는 "tucked it under")
+  - 원문 "picked the book up" → "picked... up" (또는 통째로)
+  
+  ⚠️ **금지 패턴 (이렇게 적으면 매칭 실패함)**:
+  - ❌ "carelessly look" (원문엔 "careless look" 인데 임의로 부사 만듦)
+  - ❌ "smoke light" (원문엔 "smoky light" 인데 명사로 바꿈)
+  - ❌ "tuck under" (원문엔 "tucked it under" 인데 원형으로 바꿈)
+  - ❌ "stuff a shirt into" (원문엔 "stuffed a shirt or two into" 인데 단축·원형화)
+
+🆕 **[자기 검증 단계 — 표 작성 후 반드시 실행]**
+표 작성을 완료했으면, 표를 다시 한 번 훑으면서 각 표제어가 **원문에 토씨 하나 안 틀리고 정확히 존재하는지** 검증해. (`...` 줄임 표제어는 `...` 양쪽 단어가 원문에 있는지 확인.) 만약 원문에서 못 찾는 표제어가 있다면, 그 행을 **원문 그대로의 형태로 수정**해서 다시 작성할 것. 검증을 건너뛰면 사용자가 호버해도 하이라이트가 안 떠서 학습 경험이 망가져.
+
 - 학습자 친화 안내: 첫 컬럼이 변형된 형태라 어색할 수 있는데, 그건 의도된 거야. 호버 시 원문에서 정확히 매칭되도록 한 거니까 그대로 둘 것.
 - 표 컬럼: | 표현 (원문 형태) | 품사 | 문맥상 의미 | 뉘앙스 설명 및 원문 활용 |
 
