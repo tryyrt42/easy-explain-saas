@@ -843,8 +843,6 @@ if st.session_state.get("user") is None:
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             if st.button("🔵  Google 계정으로 로그인", use_container_width=True, key="google_login_btn"):
                 try:
-                    # PKCE 방식: sign_in_with_oauth가 code_verifier를 캐싱된 클라이언트에 저장
-                    # → 콜백(?code=) 때 exchange_code_for_session이 그 verifier를 사용
                     resp = supabase.auth.sign_in_with_oauth({
                         "provider": "google",
                         "options": {"redirect_to": SITE_URL},
@@ -856,6 +854,20 @@ if st.session_state.get("user") is None:
                     st.stop()
                 except Exception as e:
                     st.error(f"구글 로그인 오류: {e}")
+
+            if st.button("🟡  카카오 계정으로 로그인", use_container_width=True, key="kakao_login_btn"):
+                try:
+                    resp = supabase.auth.sign_in_with_oauth({
+                        "provider": "kakao",
+                        "options": {"redirect_to": SITE_URL},
+                    })
+                    st.markdown(
+                        f'<meta http-equiv="refresh" content="0;url={resp.url}">',
+                        unsafe_allow_html=True
+                    )
+                    st.stop()
+                except Exception as e:
+                    st.error(f"카카오 로그인 오류: {e}")
             
             st.markdown(
                 "<p style='text-align: center; color: #64748b; font-size: 0.8rem; margin: 12px 0;'>── 또는 이메일로 로그인 ──</p>",
