@@ -331,7 +331,8 @@ def get_secret(key, default=None):
 SUPABASE_KEY = get_secret("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
-MODEL_NAME = "gemini-3.1-flash-lite" 
+MODEL_NAME = "gemini-3.1-flash-lite"
+SITE_URL = get_secret("SITE_URL", "https://easy-easy-78wv.onrender.com")
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🔑 Gemini API 키 풀 (라운드로빈 + cooldown 자동 fallback)
@@ -606,6 +607,31 @@ def parse_docx(docx_bytes):
     return [raw_text[i:i+chunk_size] for i in range(0, len(raw_text), chunk_size)]
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 🔑 구글 OAuth 콜백 처리 (구글 로그인 후 돌아왔을 때 자동 실행)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if st.session_state.get("user") is None and "code" in st.query_params:
+    try:
+        code = st.query_params["code"]
+        session_resp = supabase.auth.exchange_code_for_session({"auth_code": code})
+        google_email = session_resp.user.email if session_resp.user else None
+        if google_email:
+            # users 테이블에 없으면 자동 생성 (구글 첫 로그인)
+            existing = supabase.table("users").select("*").eq("email", google_email).execute()
+            if len(existing.data) == 0:
+                supabase.table("users").insert({
+                    "email": google_email,
+                    "plan_type": "FREE",
+                    "used_pages": 0
+                }).execute()
+                existing = supabase.table("users").select("*").eq("email", google_email).execute()
+            st.session_state["user"] = existing.data[0]
+            restore_file_for_user(google_email)
+            st.query_params.clear()
+            st.rerun()
+    except Exception as e:
+        st.query_params.clear()
+
 # F5 새로고침 방어: 사용자 + 파일 데이터 모두 복구
 if st.session_state.get("user") is None and "logged_in_email" in st.query_params:
     saved_email = st.query_params["logged_in_email"]
@@ -796,6 +822,29 @@ if st.session_state.get("user") is None:
         with st.container(border=True):
             st.markdown("<h3 style='text-align: center; font-weight: 700;'>문서 해석 시작하기</h3>", unsafe_allow_html=True)
             st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+            
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            # 🔑 구글 로그인 버튼
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            if st.button("🔵  Google 계정으로 로그인", use_container_width=True, key="google_login_btn"):
+                try:
+                    resp = supabase.auth.sign_in_with_oauth({
+                        "provider": "google",
+                        "options": {"redirect_to": SITE_URL}
+                    })
+                    # 브라우저를 구글 인증 페이지로 이동
+                    st.markdown(
+                        f'<meta http-equiv="refresh" content="0;url={resp.url}">',
+                        unsafe_allow_html=True
+                    )
+                    st.stop()
+                except Exception as e:
+                    st.error(f"구글 로그인 오류: {e}")
+            
+            st.markdown(
+                "<p style='text-align: center; color: #64748b; font-size: 0.8rem; margin: 12px 0;'>── 또는 이메일로 로그인 ──</p>",
+                unsafe_allow_html=True
+            )
             
             # OTP 흐름 상태 관리
             if "otp_sent" not in st.session_state:
