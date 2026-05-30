@@ -608,15 +608,33 @@ def parse_docx(docx_bytes):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 🔑 구글 OAuth 콜백 처리 (구글 로그인 후 돌아왔을 때 자동 실행)
+# 🔑 구글 OAuth 콜백 처리
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-if st.session_state.get("user") is None and "code" in st.query_params:
+# JS: URL 해시(#access_token=...)를 쿼리파라미터로 변환 → Python에서 읽기 위해
+st.markdown("""
+<script>
+(function() {
+    const hash = window.location.hash;
+    if (hash && hash.includes('access_token')) {
+        const params = new URLSearchParams(hash.substring(1));
+        const accessToken = params.get('access_token');
+        if (accessToken) {
+            const newUrl = window.location.pathname + '?access_token=' + encodeURIComponent(accessToken);
+            window.history.replaceState({}, '', newUrl);
+            window.location.reload();
+        }
+    }
+})();
+</script>
+""", unsafe_allow_html=True)
+
+# access_token 쿼리파라미터로 로그인 처리
+if st.session_state.get("user") is None and "access_token" in st.query_params:
     try:
-        code = st.query_params["code"]
-        session_resp = supabase.auth.exchange_code_for_session({"auth_code": code})
-        google_email = session_resp.user.email if session_resp.user else None
+        token = st.query_params["access_token"]
+        user_resp = supabase.auth.get_user(token)
+        google_email = user_resp.user.email if user_resp.user else None
         if google_email:
-            # users 테이블에 없으면 자동 생성 (구글 첫 로그인)
             existing = supabase.table("users").select("*").eq("email", google_email).execute()
             if len(existing.data) == 0:
                 supabase.table("users").insert({
@@ -629,7 +647,29 @@ if st.session_state.get("user") is None and "code" in st.query_params:
             restore_file_for_user(google_email)
             st.query_params.clear()
             st.rerun()
-    except Exception as e:
+    except Exception:
+        st.query_params.clear()
+
+# PKCE code 방식도 함께 지원
+if st.session_state.get("user") is None and "code" in st.query_params:
+    try:
+        code = st.query_params["code"]
+        session_resp = supabase.auth.exchange_code_for_session({"auth_code": code})
+        google_email = session_resp.user.email if session_resp.user else None
+        if google_email:
+            existing = supabase.table("users").select("*").eq("email", google_email).execute()
+            if len(existing.data) == 0:
+                supabase.table("users").insert({
+                    "email": google_email,
+                    "plan_type": "FREE",
+                    "used_pages": 0
+                }).execute()
+                existing = supabase.table("users").select("*").eq("email", google_email).execute()
+            st.session_state["user"] = existing.data[0]
+            restore_file_for_user(google_email)
+            st.query_params.clear()
+            st.rerun()
+    except Exception:
         st.query_params.clear()
 
 # F5 새로고침 방어: 사용자 + 파일 데이터 모두 복구
@@ -830,9 +870,11 @@ if st.session_state.get("user") is None:
                 try:
                     resp = supabase.auth.sign_in_with_oauth({
                         "provider": "google",
-                        "options": {"redirect_to": SITE_URL}
+                        "options": {
+                            "redirect_to": SITE_URL,
+                            "query_params": {"access_type": "offline", "prompt": "consent"}
+                        }
                     })
-                    # 브라우저를 구글 인증 페이지로 이동
                     st.markdown(
                         f'<meta http-equiv="refresh" content="0;url={resp.url}">',
                         unsafe_allow_html=True
