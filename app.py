@@ -615,35 +615,47 @@ def parse_docx(docx_bytes):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 🔑 구글 OAuth 콜백 처리 (PKCE: 구글 인증 후 ?code=... 로 돌아옴)
+# 🔑 소셜 OAuth 콜백 처리 (구글/카카오 인증 후 ?code=... 로 돌아옴)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 if st.session_state.get("user") is None and "code" in st.query_params:
     try:
         code = st.query_params["code"]
         session_resp = supabase.auth.exchange_code_for_session({"auth_code": code})
-        google_email = session_resp.user.email if session_resp.user else None
-        if google_email:
-            existing = supabase.table("users").select("*").eq("email", google_email).execute()
+        auth_user = session_resp.user if session_resp else None
+        # 이메일이 있으면 이메일로 식별 (구글),
+        # 없으면 Supabase UUID 기반 합성 식별자 사용 (카카오 — 이메일 권한 없음)
+        user_email = None
+        if auth_user:
+            user_email = auth_user.email
+            if not user_email:
+                provider = "social"
+                try:
+                    provider = auth_user.app_metadata.get("provider", "social")
+                except Exception:
+                    pass
+                user_email = f"{provider}_{auth_user.id}@noemail.local"
+        if user_email:
+            existing = supabase.table("users").select("*").eq("email", user_email).execute()
             if len(existing.data) == 0:
-                # 구글 첫 로그인 → users 테이블에 자동 생성
+                # 첫 로그인 → users 테이블에 자동 생성
                 supabase.table("users").insert({
-                    "email": google_email,
+                    "email": user_email,
                     "plan_type": "FREE",
                     "used_pages": 0
                 }).execute()
-                existing = supabase.table("users").select("*").eq("email", google_email).execute()
+                existing = supabase.table("users").select("*").eq("email", user_email).execute()
             st.session_state["user"] = existing.data[0]
-            st.query_params["logged_in_email"] = google_email  # F5 새로고침 방어용
-            restore_file_for_user(google_email)
+            st.query_params["logged_in_email"] = user_email  # F5 새로고침 방어용
+            restore_file_for_user(user_email)
             if "code" in st.query_params:
                 del st.query_params["code"]
             st.rerun()
         else:
-            st.error("구글 계정에서 이메일을 가져오지 못했어요. 다시 시도해주세요.")
+            st.error("계정 정보를 가져오지 못했어요. 다시 시도해주세요.")
             if "code" in st.query_params:
                 del st.query_params["code"]
     except Exception as e:
-        st.error(f"구글 로그인 처리 실패: {e}")
+        st.error(f"소셜 로그인 처리 실패: {e}")
         if "code" in st.query_params:
             del st.query_params["code"]
 
@@ -859,7 +871,11 @@ if st.session_state.get("user") is None:
                 try:
                     resp = supabase.auth.sign_in_with_oauth({
                         "provider": "kakao",
-                        "options": {"redirect_to": SITE_URL},
+                        "options": {
+                            "redirect_to": SITE_URL,
+                            # account_email은 비즈니스 인증 필요 → 닉네임/프로필만 요청
+                            "scopes": "profile_nickname profile_image",
+                        },
                     })
                     st.markdown(
                         f'<meta http-equiv="refresh" content="0;url={resp.url}">',
