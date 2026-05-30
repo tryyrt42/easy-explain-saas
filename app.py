@@ -401,6 +401,13 @@ GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
 MODEL_NAME = "gemini-3.1-flash-lite"
 SITE_URL = get_secret("SITE_URL", "https://easy-easy-78wv.onrender.com")
 
+# ============================================================
+# 📊 플랜별 월 해석 한도 (페이지)
+#    - 한 곳에서 관리: 마케팅 문구·차단 로직 모두 이 값을 참조
+# ============================================================
+FREE_PAGE_LIMIT = 4      # 무료: 월 4장
+PRO_PAGE_LIMIT = 500     # PRO: 월 500장 (원가 안전선)
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🔑 Gemini API 키 풀 (라운드로빈 + cooldown 자동 fallback)
 # - 단일 키: GEMINI_API_KEY (기존 호환)
@@ -448,7 +455,7 @@ def _mark_key_cooldown(key, seconds=300):
     _GEMINI_COOLDOWN[key] = _time_mod.time() + seconds
 
 
-def call_gemini_with_pool(prompt, model_name=MODEL_NAME, max_output_tokens=16384):
+def call_gemini_with_pool(prompt, model_name=MODEL_NAME, max_output_tokens=8192):
     """키 풀에서 자동 선택해서 Gemini 호출.
     429/quota 에러면 그 키를 cooldown에 넣고 다음 키로 자동 재시도.
     전부 실패하면 RuntimeError."""
@@ -743,7 +750,7 @@ def show_pricing_modal():
         with st.container(height=420, border=True):
             st.subheader("FREE")
             st.markdown("## ₩ 0 / 월")
-            st.markdown("""<div style='min-height: 180px; color: #94a3b8;'>✔️ <b>매월 3장</b> 해석 제공<br>✔️ 기본 문서 텍스트 추출<br>✔️ 일반 속도 처리</div>""", unsafe_allow_html=True)
+            st.markdown("""<div style='min-height: 180px; color: #94a3b8;'>✔️ <b>매월 4장</b> 해석 제공<br>✔️ 기본 문서 텍스트 추출<br>✔️ 일반 속도 처리</div>""", unsafe_allow_html=True)
             if user_info.get('plan_type') == 'FREE':
                 st.button("현재 이용 중", disabled=True, key="modal_free_btn", use_container_width=True)
             else:
@@ -753,7 +760,7 @@ def show_pricing_modal():
         with st.container(height=420, border=True):
             st.subheader("PRO (인기)")
             st.markdown("## ₩ 9,900 / 월")
-            st.markdown("""<div style='min-height: 180px; color: #94a3b8;'>✔️ <b>월 1,000장 해석 제공</b><br>✔️ 1타 강사 / 비유 모드 완벽 지원<br>✔️ 한도 초과 스트레스 없는 쾌적함</div>""", unsafe_allow_html=True)
+            st.markdown("""<div style='min-height: 180px; color: #94a3b8;'>✔️ <b>월 500장 해석 제공</b><br>✔️ 1타 강사 / 비유 모드 완벽 지원<br>✔️ 한도 초과 스트레스 없는 쾌적함</div>""", unsafe_allow_html=True)
             BASE_CHECKOUT_LINK = "https://easy-explain-saas.lemonsqueezy.com/checkout/buy/7a87b27c-335a-42c9-9995-54eb03fb49a3"
             current_user_email = user_info.get('email', '')
             final_checkout_link = f"{BASE_CHECKOUT_LINK}?checkout[email]={current_user_email}"
@@ -1988,8 +1995,14 @@ def run_interpretation(text, mode, cache_key, pages_used=1):
         
         if not is_admin and current_user.get('plan_type') == 'FREE':
             current_used = current_user.get('used_pages', 0)
-            if current_used + pages_used > 3:
-                st.error(f"🚫 무료 한도 초과: 현재 {current_used}장 사용 + 이번 {pages_used}장 = 한도 3장 초과")
+            if current_used + pages_used > FREE_PAGE_LIMIT:
+                st.error(f"🚫 무료 한도 초과: 현재 {current_used}장 사용 + 이번 {pages_used}장 = 한도 {FREE_PAGE_LIMIT}장 초과")
+                return False
+
+        if not is_admin and current_user.get('plan_type') == 'PRO':
+            current_used = current_user.get('used_pages', 0)
+            if current_used + pages_used > PRO_PAGE_LIMIT:
+                st.error(f"🚫 이번 달 PRO 한도({PRO_PAGE_LIMIT}장)를 초과했습니다: 현재 {current_used}장 + 이번 {pages_used}장. 다음 달에 한도가 초기화됩니다.")
                 return False
         
         spinner_msg = f"🧠 [ADMIN] {pages_used}페이지 분석 중..." if is_admin else f"🧠 {pages_used}페이지 분석 중..."
