@@ -611,27 +611,30 @@ def parse_docx(docx_bytes):
 # 🔑 구글 OAuth 콜백 처리
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # JS: URL 해시(#access_token=...)를 쿼리파라미터로 변환 → Python에서 읽기 위해
-st.markdown("""
+import streamlit.components.v1 as _stc
+
+# 구글 OAuth 콜백: 해시에서 access_token 추출 → 쿼리파라미터로 전달
+_stc.html("""
 <script>
 (function() {
-    // Streamlit은 iframe 안에서 실행되므로 parent window의 URL을 봐야 함
-    var loc = (window.parent && window.parent.location) ? window.parent.location : window.location;
-    var hash = loc.hash;
+    var hash = window.location.hash || window.parent.location.hash || '';
     if (hash && hash.indexOf('access_token') !== -1) {
         var params = {};
-        hash.substring(1).split('&').forEach(function(part) {
+        hash.replace(/^#/, '').split('&').forEach(function(part) {
             var eq = part.indexOf('=');
             if (eq > 0) {
                 params[decodeURIComponent(part.substring(0, eq))] = decodeURIComponent(part.substring(eq + 1));
             }
         });
         if (params['access_token']) {
-            loc.replace(loc.pathname + '?access_token=' + encodeURIComponent(params['access_token']));
+            var newUrl = window.location.origin + window.location.pathname + 
+                         '?access_token=' + encodeURIComponent(params['access_token']);
+            window.parent.location.replace(newUrl);
         }
     }
 })();
 </script>
-""", unsafe_allow_html=True)
+""", height=0)
 
 # access_token 쿼리파라미터로 로그인 처리
 if st.session_state.get("user") is None and "access_token" in st.query_params:
