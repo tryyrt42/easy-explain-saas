@@ -329,7 +329,14 @@ def get_secret(key, default=None):
         return default
 
 SUPABASE_KEY = get_secret("SUPABASE_KEY")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# 🔑 클라이언트를 캐싱해야 OAuth(PKCE)의 code_verifier가 rerun 사이에 유지됨.
+# (매 rerun마다 create_client 하면 verifier가 사라져서 구글 로그인 콜백이 실패함)
+@st.cache_resource
+def get_supabase_client() -> Client:
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+supabase: Client = get_supabase_client()
 GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
 MODEL_NAME = "gemini-3.1-flash-lite"
 SITE_URL = get_secret("SITE_URL", "https://easy-easy-78wv.onrender.com")
@@ -608,57 +615,8 @@ def parse_docx(docx_bytes):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 🔑 구글 OAuth 콜백 처리
+# 🔑 구글 OAuth 콜백 처리 (PKCE: 구글 인증 후 ?code=... 로 돌아옴)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# JS: URL 해시(#access_token=...)를 쿼리파라미터로 변환 → Python에서 읽기 위해
-import streamlit.components.v1 as _stc
-
-# 구글 OAuth 콜백: 해시에서 access_token 추출 → 쿼리파라미터로 전달
-_stc.html("""
-<script>
-(function() {
-    var hash = window.location.hash || window.parent.location.hash || '';
-    if (hash && hash.indexOf('access_token') !== -1) {
-        var params = {};
-        hash.replace(/^#/, '').split('&').forEach(function(part) {
-            var eq = part.indexOf('=');
-            if (eq > 0) {
-                params[decodeURIComponent(part.substring(0, eq))] = decodeURIComponent(part.substring(eq + 1));
-            }
-        });
-        if (params['access_token']) {
-            var newUrl = window.location.origin + window.location.pathname + 
-                         '?access_token=' + encodeURIComponent(params['access_token']);
-            window.parent.location.replace(newUrl);
-        }
-    }
-})();
-</script>
-""", height=0)
-
-# access_token 쿼리파라미터로 로그인 처리
-if st.session_state.get("user") is None and "access_token" in st.query_params:
-    try:
-        token = st.query_params["access_token"]
-        user_resp = supabase.auth.get_user(token)
-        google_email = user_resp.user.email if user_resp.user else None
-        if google_email:
-            existing = supabase.table("users").select("*").eq("email", google_email).execute()
-            if len(existing.data) == 0:
-                supabase.table("users").insert({
-                    "email": google_email,
-                    "plan_type": "FREE",
-                    "used_pages": 0
-                }).execute()
-                existing = supabase.table("users").select("*").eq("email", google_email).execute()
-            st.session_state["user"] = existing.data[0]
-            restore_file_for_user(google_email)
-            st.query_params.clear()
-            st.rerun()
-    except Exception:
-        st.query_params.clear()
-
-# PKCE code 방식도 함께 지원
 if st.session_state.get("user") is None and "code" in st.query_params:
     try:
         code = st.query_params["code"]
@@ -667,6 +625,7 @@ if st.session_state.get("user") is None and "code" in st.query_params:
         if google_email:
             existing = supabase.table("users").select("*").eq("email", google_email).execute()
             if len(existing.data) == 0:
+                # 구글 첫 로그인 → users 테이블에 자동 생성
                 supabase.table("users").insert({
                     "email": google_email,
                     "plan_type": "FREE",
@@ -674,11 +633,19 @@ if st.session_state.get("user") is None and "code" in st.query_params:
                 }).execute()
                 existing = supabase.table("users").select("*").eq("email", google_email).execute()
             st.session_state["user"] = existing.data[0]
+            st.query_params["logged_in_email"] = google_email  # F5 새로고침 방어용
             restore_file_for_user(google_email)
-            st.query_params.clear()
+            if "code" in st.query_params:
+                del st.query_params["code"]
             st.rerun()
-    except Exception:
-        st.query_params.clear()
+        else:
+            st.error("구글 계정에서 이메일을 가져오지 못했어요. 다시 시도해주세요.")
+            if "code" in st.query_params:
+                del st.query_params["code"]
+    except Exception as e:
+        st.error(f"구글 로그인 처리 실패: {e}")
+        if "code" in st.query_params:
+            del st.query_params["code"]
 
 # F5 새로고침 방어: 사용자 + 파일 데이터 모두 복구
 if st.session_state.get("user") is None and "logged_in_email" in st.query_params:
@@ -876,15 +843,14 @@ if st.session_state.get("user") is None:
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             if st.button("🔵  Google 계정으로 로그인", use_container_width=True, key="google_login_btn"):
                 try:
-                    import urllib.parse
-                    # implicit flow로 직접 URL 구성 (PKCE 우회 — code_verifier 문제 해결)
-                    params = urllib.parse.urlencode({
+                    # PKCE 방식: sign_in_with_oauth가 code_verifier를 캐싱된 클라이언트에 저장
+                    # → 콜백(?code=) 때 exchange_code_for_session이 그 verifier를 사용
+                    resp = supabase.auth.sign_in_with_oauth({
                         "provider": "google",
-                        "redirect_to": SITE_URL,
+                        "options": {"redirect_to": SITE_URL},
                     })
-                    oauth_url = f"{SUPABASE_URL}/auth/v1/authorize?{params}"
                     st.markdown(
-                        f'<meta http-equiv="refresh" content="0;url={oauth_url}">',
+                        f'<meta http-equiv="refresh" content="0;url={resp.url}">',
                         unsafe_allow_html=True
                     )
                     st.stop()
