@@ -868,15 +868,15 @@ if st.session_state.get("user") is None:
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             if st.button("🔵  Google 계정으로 로그인", use_container_width=True, key="google_login_btn"):
                 try:
-                    resp = supabase.auth.sign_in_with_oauth({
+                    import urllib.parse
+                    # implicit flow로 직접 URL 구성 (PKCE 우회 — code_verifier 문제 해결)
+                    params = urllib.parse.urlencode({
                         "provider": "google",
-                        "options": {
-                            "redirect_to": SITE_URL,
-                            "query_params": {"access_type": "offline", "prompt": "consent"}
-                        }
+                        "redirect_to": SITE_URL,
                     })
+                    oauth_url = f"{SUPABASE_URL}/auth/v1/authorize?{params}"
                     st.markdown(
-                        f'<meta http-equiv="refresh" content="0;url={resp.url}">',
+                        f'<meta http-equiv="refresh" content="0;url={oauth_url}">',
                         unsafe_allow_html=True
                     )
                     st.stop()
