@@ -739,7 +739,7 @@ if st.session_state.get("user") is None:
             <rect x="3" y="3" width="22" height="22" rx="7" fill="url(#ee-grad-back)" opacity="0.6"/>
             <rect x="17" y="17" width="22" height="22" rx="7" fill="url(#ee-grad-front)"/>
         </svg>
-        <span class="brand-name">Easy-Easy</span>
+        <span class="brand-name">Easy-Easy (쉽다쉬워)</span>
     </div>
     """, unsafe_allow_html=True)
 
