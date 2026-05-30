@@ -614,14 +614,19 @@ def parse_docx(docx_bytes):
 st.markdown("""
 <script>
 (function() {
-    const hash = window.location.hash;
-    if (hash && hash.includes('access_token')) {
-        const params = new URLSearchParams(hash.substring(1));
-        const accessToken = params.get('access_token');
-        if (accessToken) {
-            const newUrl = window.location.pathname + '?access_token=' + encodeURIComponent(accessToken);
-            window.history.replaceState({}, '', newUrl);
-            window.location.reload();
+    // Streamlit은 iframe 안에서 실행되므로 parent window의 URL을 봐야 함
+    var loc = (window.parent && window.parent.location) ? window.parent.location : window.location;
+    var hash = loc.hash;
+    if (hash && hash.indexOf('access_token') !== -1) {
+        var params = {};
+        hash.substring(1).split('&').forEach(function(part) {
+            var eq = part.indexOf('=');
+            if (eq > 0) {
+                params[decodeURIComponent(part.substring(0, eq))] = decodeURIComponent(part.substring(eq + 1));
+            }
+        });
+        if (params['access_token']) {
+            loc.replace(loc.pathname + '?access_token=' + encodeURIComponent(params['access_token']));
         }
     }
 })();
