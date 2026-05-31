@@ -476,6 +476,26 @@ def maybe_reset_free_usage(email: str, user_dict: dict, plan: str):
 #    따라서 앱 코드는 plan_type 을 "읽기"만 하고 결제 관련 쓰기는 하지 않는다.
 # ============================================================
 
+# ============================================================
+# 📊 모드 사용 통계 (전체 유저 합산)
+#    - mode_stats 테이블 (mode text PK, count int8)
+#    - 해석 성공 시 해당 모드 count +1
+# ============================================================
+def increment_mode_stat(mode: str):
+    if not mode:
+        return
+    try:
+        res = supabase.table("mode_stats").select("count").eq("mode", mode).execute()
+        if res.data:
+            new_count = int(res.data[0].get("count", 0) or 0) + 1
+            supabase.table("mode_stats").update({"count": new_count}).eq("mode", mode).execute()
+        else:
+            # 행이 없으면(새 모드 추가 등) 새로 만들어 1로 시작
+            supabase.table("mode_stats").insert({"mode": mode, "count": 1}).execute()
+    except Exception:
+        # mode_stats 테이블이 없거나 일시 오류면 조용히 통과 (해석 자체는 정상 진행)
+        pass
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🔑 Gemini API 키 풀 (라운드로빈 + cooldown 자동 fallback)
 # - 단일 키: GEMINI_API_KEY (기존 호환)
@@ -1298,6 +1318,23 @@ if st.session_state.get("show_admin_stats"):
     cc1.metric("평균 (7원/장)", f"{total_pages * 7:,}원")
     cc2.metric("중간 (10원/장)", f"{total_pages * 10:,}원")
     cc3.metric("보수적 (18원/장)", f"{total_pages * 18:,}원")
+
+    # 모드별 사용량 (전체 유저 합산)
+    st.subheader("🎯 모드별 사용량")
+    try:
+        _modes = supabase.table("mode_stats").select("*").execute().data or []
+    except Exception:
+        _modes = []
+    if _modes:
+        _modes_sorted = sorted(_modes, key=lambda r: int(r.get("count", 0) or 0), reverse=True)
+        _mode_total = sum(int(r.get("count", 0) or 0) for r in _modes_sorted)
+        for r in _modes_sorted:
+            _cnt = int(r.get("count", 0) or 0)
+            _pct = (_cnt / _mode_total) if _mode_total else 0
+            st.markdown(f"**{r.get('mode', '')}** — {_cnt}회 ({_pct*100:.0f}%)")
+            st.progress(_pct)
+    else:
+        st.info("아직 모드 사용 기록이 없습니다.")
 
     # 상위 사용자 Top 10
     st.subheader("🔝 사용량 상위 10명")
@@ -2177,7 +2214,10 @@ def run_interpretation(text, mode, cache_key, pages_used=1):
             new_used = current_user.get('used_pages', 0) + pages_used
             supabase.table("users").update({"used_pages": new_used}).eq("email", current_user.get('email')).execute()
             st.session_state["user"]['used_pages'] = new_used
-        
+
+        # 📊 모드 사용 통계 +1 (전체 유저 합산)
+        increment_mode_stat(mode)
+
         st.session_state["interpret_cache"][cache_key] = response.text
         return True
     except Exception as e:
