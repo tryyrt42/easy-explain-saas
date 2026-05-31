@@ -409,9 +409,10 @@ FREE_PAGE_LIMIT = 4      # 무료: 월 4장
 PRO_PAGE_LIMIT = 500     # PRO: 월 500장 (원가 안전선)
 
 # ============================================================
-# 🗓️ 사용량 리셋 (30일 주기)
-#    - FREE: 가입일(created_at) 기준 30일마다
-#    - PRO : LemonSqueezy 결제 갱신일(renews_at) 기준
+# 🗓️ FREE 사용량 리셋 (가입일 기준 30일 주기)
+#    - FREE 유저만: created_at 기준 30일마다 used_pages 0으로
+#    - PRO 전환·리셋은 Make(웹훅)가 LemonSqueezy 신호로 처리하므로 코드는 관여 안 함
+#    - ADMIN은 무제한이라 제외
 #    - Supabase users 테이블에 'usage_reset_at' (timestamptz) 컬럼 필요
 # ============================================================
 def _now_utc():
@@ -437,124 +438,43 @@ def _roll_forward_30(start, now):
     if start is None:
         return now + timedelta(days=30)
     nxt = start
-    # 무한루프 안전장치 (최대 1000주기)
-    for _ in range(1000):
+    for _ in range(1000):  # 무한루프 안전장치
         if nxt > now:
             break
         nxt = nxt + timedelta(days=30)
     return nxt
 
-def _set_reset_at(email, user_dict, dt):
-    iso = dt.isoformat()
-    supabase.table("users").update({"usage_reset_at": iso}).eq("email", email).execute()
-    user_dict["usage_reset_at"] = iso
-
-def _reset_and_set(email, user_dict, dt):
-    iso = dt.isoformat()
-    supabase.table("users").update({"used_pages": 0, "usage_reset_at": iso}).eq("email", email).execute()
-    user_dict["used_pages"] = 0
-    user_dict["usage_reset_at"] = iso
-
-def maybe_reset_usage(email: str, user_dict: dict, plan: str, sub_info: dict | None):
-    """30일 주기로 used_pages 초기화. ADMIN 제외."""
-    if not email or plan == "ADMIN":
+def maybe_reset_free_usage(email: str, user_dict: dict, plan: str):
+    """FREE 유저만 가입일 기준 30일 주기로 used_pages 초기화. PRO/ADMIN 제외."""
+    if not email or plan != "FREE":
         return
     now = _now_utc()
     stored = _parse_dt(user_dict.get("usage_reset_at"))
+    created = _parse_dt(user_dict.get("created_at"))
     try:
-        if plan == "PRO":
-            # 결제 갱신일 기준 (renews_at 우선, 없으면 ends_at)
-            renews = _parse_dt((sub_info or {}).get("renews_at")) \
-                     or _parse_dt((sub_info or {}).get("ends_at"))
-            if renews is None:
-                return  # 결제일 정보 없으면 보류
-            if stored is None:
-                # 최초: 갱신일만 기록, 사용량 보존
-                _set_reset_at(email, user_dict, renews)
-            elif renews != stored:
-                # 갱신일이 바뀜 = 새 결제주기 시작 → 리셋
-                _reset_and_set(email, user_dict, renews)
-        else:  # FREE
-            created = _parse_dt(user_dict.get("created_at"))
-            if stored is None:
-                # 최초: 가입일+30일을 다음 리셋일로 기록, 사용량 보존
-                _set_reset_at(email, user_dict, _roll_forward_30(created, now))
-            elif now >= stored:
-                # 리셋 예정일 지남 → 리셋 + 다음 주기로
-                _reset_and_set(email, user_dict, _roll_forward_30(stored, now))
+        if stored is None:
+            # 최초: 가입일+30일을 다음 리셋일로 기록, 사용량 보존
+            nxt = _roll_forward_30(created, now)
+            supabase.table("users").update({"usage_reset_at": nxt.isoformat()}).eq("email", email).execute()
+            user_dict["usage_reset_at"] = nxt.isoformat()
+        elif now >= stored:
+            # 리셋 예정일 지남 → 리셋 + 다음 주기로
+            nxt = _roll_forward_30(stored, now)
+            supabase.table("users").update(
+                {"used_pages": 0, "usage_reset_at": nxt.isoformat()}
+            ).eq("email", email).execute()
+            user_dict["used_pages"] = 0
+            user_dict["usage_reset_at"] = nxt.isoformat()
     except Exception:
         # usage_reset_at 컬럼이 없거나 일시 오류면 조용히 통과 (앱 중단 방지)
         pass
 
 # ============================================================
-# 💳 LemonSqueezy 구독 동기화 (결제 완료 → PRO 자동 전환)
-#    - 웹훅 대신 API 조회 방식 (Streamlit 친화적)
-#    - 활성 구독이 있으면 PRO, 없으면 FREE 로 동기화 (ADMIN은 절대 변경 안 함)
+# 💳 결제 처리 안내
+#    결제 → PRO 전환, 갱신 → 리셋, 취소 → FREE 복귀는
+#    모두 Make 웹훅 시나리오(LemonSqueezy → Supabase PATCH)가 담당한다.
+#    따라서 앱 코드는 plan_type 을 "읽기"만 하고 결제 관련 쓰기는 하지 않는다.
 # ============================================================
-LEMONSQUEEZY_API_KEY = get_secret("LEMONSQUEEZY_API_KEY")
-
-def _ls_get_subscription_info(email: str) -> dict:
-    """이메일의 구독 정보 조회. {'active': bool, 'renews_at': str|None, 'ends_at': str|None}"""
-    empty = {"active": False, "renews_at": None, "ends_at": None}
-    if not LEMONSQUEEZY_API_KEY or not email:
-        return empty
-    import urllib.request, urllib.parse, json as _json
-    from datetime import datetime, timezone
-
-    url = "https://api.lemonsqueezy.com/v1/subscriptions?" + urllib.parse.urlencode(
-        {"filter[user_email]": email}
-    )
-    req = urllib.request.Request(url, headers={
-        "Accept": "application/vnd.api+json",
-        "Content-Type": "application/vnd.api+json",
-        "Authorization": f"Bearer {LEMONSQUEEZY_API_KEY}",
-    })
-    with urllib.request.urlopen(req, timeout=8) as resp:
-        data = _json.loads(resp.read().decode("utf-8"))
-
-    now = datetime.now(timezone.utc)
-    for sub in data.get("data", []):
-        attr = sub.get("attributes", {})
-        status = attr.get("status")
-        info = {
-            "active": True,
-            "renews_at": attr.get("renews_at"),
-            "ends_at": attr.get("ends_at"),
-        }
-        # 권한 부여: 활성/체험/연체(유예) 상태
-        if status in ("active", "on_trial", "past_due"):
-            return info
-        # 취소했지만 아직 이용 기간이 남은 경우
-        if status == "cancelled" and attr.get("ends_at"):
-            try:
-                ends = datetime.fromisoformat(attr["ends_at"].replace("Z", "+00:00"))
-                if ends > now:
-                    return info
-            except Exception:
-                pass
-    return empty
-
-
-def sync_plan_with_lemonsqueezy(email: str, current_plan: str):
-    """구독 조회 → plan_type 동기화. (새 플랜, 구독정보) 튜플 반환. ADMIN은 안 건드림."""
-    if current_plan == "ADMIN":
-        return current_plan, None
-    if not LEMONSQUEEZY_API_KEY or not email:
-        return current_plan, None
-    try:
-        sub_info = _ls_get_subscription_info(email)
-    except Exception:
-        # API 오류 시 현재 상태 유지 (강등/승급 모두 보류)
-        return current_plan, None
-
-    desired = "PRO" if sub_info["active"] else "FREE"
-    if desired != current_plan:
-        try:
-            supabase.table("users").update({"plan_type": desired}).eq("email", email).execute()
-            st.session_state["user"]["plan_type"] = desired
-        except Exception:
-            return current_plan, sub_info
-    return desired, sub_info
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🔑 Gemini API 키 풀 (라운드로빈 + cooldown 자동 fallback)
@@ -1397,23 +1317,10 @@ if st.query_params.get("page") == "admin":
 # ============================================================
 user_data = st.session_state.get("user", {})
 
-# 💳 구독 동기화 + 사용량 리셋 (세션당 + 5분 스로틀로 과도한 API 호출 방지)
-#    구독 조회 한 번으로 PRO 전환과 결제일 기준 리셋을 함께 처리.
-#    결제 직후 즉시 반영이 필요하면 사이드바의 "구독 상태 새로고침" 버튼 사용
-def _maybe_sync_plan(force: bool = False):
-    import time as _t
-    last = st.session_state.get("_last_sub_sync", 0)
-    if force or (_t.time() - last > 300):
-        email = user_data.get("email", "")
-        new_plan, sub_info = sync_plan_with_lemonsqueezy(
-            email, user_data.get("plan_type", "FREE")
-        )
-        user_data["plan_type"] = new_plan
-        # 30일 주기 리셋 (FREE=가입일 / PRO=결제 갱신일)
-        maybe_reset_usage(email, user_data, new_plan, sub_info)
-        st.session_state["_last_sub_sync"] = _t.time()
-
-_maybe_sync_plan()
+# 🗓️ FREE 유저 30일 사용량 리셋 (가입일 기준). PRO 전환/리셋은 Make가 담당.
+maybe_reset_free_usage(
+    user_data.get("email", ""), user_data, user_data.get("plan_type", "FREE")
+)
 
 with st.sidebar:
     st.markdown(f"**👤 계정**: {user_data.get('email', '')}")
@@ -1444,12 +1351,6 @@ with st.sidebar:
 
     if st.button("💎 플랜 업그레이드", use_container_width=True):
         show_pricing_modal()
-
-    # 결제 직후 PRO 반영이 안 보이면 즉시 재조회
-    if user_data.get('plan_type') != 'ADMIN':
-        if st.button("🔄 구독 상태 새로고침", use_container_width=True):
-            _maybe_sync_plan(force=True)
-            st.rerun()
 
     if st.button("로그아웃", use_container_width=True):
         # 🧹 로그아웃 시 모든 세션 데이터 + 외부 캐시 완전 정리
