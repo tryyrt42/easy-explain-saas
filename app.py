@@ -579,6 +579,7 @@ def call_gemini_with_pool(prompt, model_name=MODEL_NAME, max_output_tokens=8192)
                 )
                 if any(s in err_str for s in rate_limit_signals):
                     _mark_key_cooldown(key, seconds=300)
+                    increment_mode_stat("_rate_limit_429")  # 📊 누적 429 카운트
                     continue
                 # 기타 에러 — 일시적일 수 있으니 다음 키 시도하되, 짧은 cooldown
                 _mark_key_cooldown(key, seconds=30)
@@ -1326,7 +1327,9 @@ if st.session_state.get("show_admin_stats"):
     except Exception:
         _modes = []
     if _modes:
-        _modes_sorted = sorted(_modes, key=lambda r: int(r.get("count", 0) or 0), reverse=True)
+        # '_' 로 시작하는 특수 행(예: _rate_limit_429)은 모드 목록에서 제외
+        _real_modes = [r for r in _modes if not str(r.get("mode", "")).startswith("_")]
+        _modes_sorted = sorted(_real_modes, key=lambda r: int(r.get("count", 0) or 0), reverse=True)
         _mode_total = sum(int(r.get("count", 0) or 0) for r in _modes_sorted)
         for r in _modes_sorted:
             _cnt = int(r.get("count", 0) or 0)
@@ -1336,7 +1339,7 @@ if st.session_state.get("show_admin_stats"):
     else:
         st.info("아직 모드 사용 기록이 없습니다.")
 
-    # 모드 통계 리셋 (2단계 확인 — 유저 데이터는 절대 건드리지 않음)
+    # 모드 통계 리셋 (2단계 확인 — 모드 카운트만, 유저 데이터·429 카운터는 안 건드림)
     if not st.session_state.get("confirm_mode_reset"):
         if st.button("🔄 모드 통계 리셋", key="mode_reset_btn"):
             st.session_state["confirm_mode_reset"] = True
@@ -1346,8 +1349,10 @@ if st.session_state.get("show_admin_stats"):
         _cok, _ccancel = st.columns(2)
         if _cok.button("✅ 확인, 리셋", key="mode_reset_confirm"):
             try:
+                # '_' 특수 행(429 카운터 등)은 제외하고 실제 모드만 0으로
                 for r in (_modes or []):
-                    supabase.table("mode_stats").update({"count": 0}).eq("mode", r.get("mode")).execute()
+                    if not str(r.get("mode", "")).startswith("_"):
+                        supabase.table("mode_stats").update({"count": 0}).eq("mode", r.get("mode")).execute()
                 st.session_state["confirm_mode_reset"] = False
                 st.success("모드 통계를 초기화했습니다.")
                 st.rerun()
@@ -1355,6 +1360,53 @@ if st.session_state.get("show_admin_stats"):
                 st.error(f"리셋 실패: {e}")
         if _ccancel.button("취소", key="mode_reset_cancel"):
             st.session_state["confirm_mode_reset"] = False
+            st.rerun()
+
+    # API 키 / Rate Limit 상태
+    st.subheader("⚙️ API 키 & Rate Limit")
+    # 누적 429 횟수 (mode_stats 의 특수 행)
+    _r429 = 0
+    for r in (_modes or []):
+        if str(r.get("mode", "")) == "_rate_limit_429":
+            _r429 = int(r.get("count", 0) or 0)
+            break
+    st.metric("누적 429 (rate limit 초과)", f"{_r429}회",
+              help="키가 한도 초과로 cooldown된 누적 횟수. 자주 늘면 키 추가/티어 상향 신호.")
+
+    # 현재 키 풀 상태 (지금 이 순간)
+    try:
+        _pool = get_gemini_pool_status()
+    except Exception:
+        _pool = []
+    if _pool:
+        st.caption("현재 키 상태 (cooldown 남은 시간)")
+        st.table([
+            {
+                "키": p.get("key_preview", ""),
+                "상태": "🟢 정상" if p.get("cooldown_remaining_sec", 0) == 0
+                        else f"🔴 cooldown {p.get('cooldown_remaining_sec', 0)}초",
+            }
+            for p in _pool
+        ])
+
+    # 429 카운터 리셋 (2단계 확인)
+    if not st.session_state.get("confirm_429_reset"):
+        if st.button("🔄 429 카운터 리셋", key="r429_reset_btn"):
+            st.session_state["confirm_429_reset"] = True
+            st.rerun()
+    else:
+        st.warning("⚠️ 누적 429 횟수를 0으로 초기화합니다.")
+        _ok2, _cancel2 = st.columns(2)
+        if _ok2.button("✅ 확인, 리셋", key="r429_reset_confirm"):
+            try:
+                supabase.table("mode_stats").update({"count": 0}).eq("mode", "_rate_limit_429").execute()
+                st.session_state["confirm_429_reset"] = False
+                st.success("429 카운터를 초기화했습니다.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"리셋 실패: {e}")
+        if _cancel2.button("취소", key="r429_reset_cancel"):
+            st.session_state["confirm_429_reset"] = False
             st.rerun()
 
     # 상위 사용자 Top 10
