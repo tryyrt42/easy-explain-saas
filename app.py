@@ -1182,6 +1182,66 @@ if st.session_state.get("user") is None:
     st.stop() 
 
 # ============================================================
+# 📊 관리자 통계 (?page=admin) — 로그인 + ADMIN 플랜만 접근 가능
+#    이 지점은 로그인 게이트(st.stop)를 통과한 뒤라 항상 로그인 상태임
+# ============================================================
+if st.query_params.get("page") == "admin":
+    _me = st.session_state.get("user", {})
+    if _me.get("plan_type") != "ADMIN":
+        st.error("🚫 접근 권한이 없습니다. 관리자 전용 페이지입니다.")
+        st.stop()
+
+    st.title("📊 Easy-Easy 관리자 통계")
+    try:
+        _rows = supabase.table("users").select("*").execute().data or []
+    except Exception as e:
+        st.error(f"통계 조회 실패: {e}")
+        st.stop()
+
+    total_users = len(_rows)
+    free_n = sum(1 for r in _rows if r.get("plan_type") == "FREE")
+    pro_n = sum(1 for r in _rows if r.get("plan_type") == "PRO")
+    admin_n = sum(1 for r in _rows if r.get("plan_type") == "ADMIN")
+    total_pages = sum(int(r.get("used_pages", 0) or 0) for r in _rows)
+
+    # 핵심 지표
+    c1, c2, c3 = st.columns(3)
+    c1.metric("총 유저 수", f"{total_users}명")
+    c2.metric("총 해석 페이지", f"{total_pages:,}장")
+    c3.metric("추정 월 매출", f"{pro_n * 9900:,}원", help="PRO 유저 수 × 9,900원")
+
+    c4, c5, c6 = st.columns(3)
+    c4.metric("FREE", f"{free_n}명")
+    c5.metric("PRO", f"{pro_n}명")
+    c6.metric("ADMIN", f"{admin_n}명")
+
+    # 추정 API 원가 (장당 단가 3종 기준)
+    st.subheader("💸 추정 누적 API 원가")
+    st.caption("총 해석 페이지 × 장당 단가. 실제 비용은 문서 난이도에 따라 이 범위 안에서 결정됩니다.")
+    cc1, cc2, cc3 = st.columns(3)
+    cc1.metric("평균 (7원/장)", f"{total_pages * 7:,}원")
+    cc2.metric("중간 (10원/장)", f"{total_pages * 10:,}원")
+    cc3.metric("보수적 (18원/장)", f"{total_pages * 18:,}원")
+
+    # 상위 사용자 Top 10
+    st.subheader("🔝 사용량 상위 10명")
+    _top = sorted(_rows, key=lambda r: int(r.get("used_pages", 0) or 0), reverse=True)[:10]
+    if _top:
+        st.table([
+            {
+                "이메일": r.get("email", ""),
+                "플랜": r.get("plan_type", ""),
+                "사용 페이지": int(r.get("used_pages", 0) or 0),
+            }
+            for r in _top
+        ])
+    else:
+        st.info("아직 유저 데이터가 없습니다.")
+
+    st.caption("← 통계 페이지를 닫으려면 주소창에서 ?page=admin 을 지우고 새로고침하세요.")
+    st.stop()
+
+# ============================================================
 # 👤 5. 유저 사이드바
 # ============================================================
 user_data = st.session_state.get("user", {})
@@ -1193,7 +1253,23 @@ with st.sidebar:
     if user_data.get('plan_type') == 'ADMIN':
         st.markdown(f"**📄 사용량**: {user_data.get('used_pages', 0)} 장 (👑 무제한)")
     else:
-        st.markdown(f"**📄 사용량**: {user_data.get('used_pages', 0)} 장")
+        _used = user_data.get('used_pages', 0)
+        _limit = PRO_PAGE_LIMIT if user_data.get('plan_type') == 'PRO' else FREE_PAGE_LIMIT
+        _remaining = max(0, _limit - _used)
+        _ratio = min(1.0, _used / _limit) if _limit else 0
+        # 한도 대비 색상: 80% 미만 회색, 80% 이상 노랑, 다 쓰면 빨강
+        if _ratio >= 1.0:
+            _color = "#ef4444"
+        elif _ratio >= 0.8:
+            _color = "#f59e0b"
+        else:
+            _color = "#94a3b8"
+        st.markdown(
+            f"**📄 사용량**: <span style='color:{_color};'>{_used} / {_limit}장 "
+            f"({_remaining}장 남음)</span>",
+            unsafe_allow_html=True,
+        )
+        st.progress(_ratio)
 
     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
 
