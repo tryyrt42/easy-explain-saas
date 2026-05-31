@@ -1336,6 +1336,27 @@ if st.session_state.get("show_admin_stats"):
     else:
         st.info("아직 모드 사용 기록이 없습니다.")
 
+    # 모드 통계 리셋 (2단계 확인 — 유저 데이터는 절대 건드리지 않음)
+    if not st.session_state.get("confirm_mode_reset"):
+        if st.button("🔄 모드 통계 리셋", key="mode_reset_btn"):
+            st.session_state["confirm_mode_reset"] = True
+            st.rerun()
+    else:
+        st.warning("⚠️ 모드 사용량을 모두 0으로 초기화합니다. 되돌릴 수 없습니다.")
+        _cok, _ccancel = st.columns(2)
+        if _cok.button("✅ 확인, 리셋", key="mode_reset_confirm"):
+            try:
+                for r in (_modes or []):
+                    supabase.table("mode_stats").update({"count": 0}).eq("mode", r.get("mode")).execute()
+                st.session_state["confirm_mode_reset"] = False
+                st.success("모드 통계를 초기화했습니다.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"리셋 실패: {e}")
+        if _ccancel.button("취소", key="mode_reset_cancel"):
+            st.session_state["confirm_mode_reset"] = False
+            st.rerun()
+
     # 상위 사용자 Top 10
     st.subheader("🔝 사용량 상위 10명")
     _top = sorted(_rows, key=lambda r: int(r.get("used_pages", 0) or 0), reverse=True)[:10]
