@@ -408,6 +408,74 @@ SITE_URL = get_secret("SITE_URL", "https://easy-easy-78wv.onrender.com")
 FREE_PAGE_LIMIT = 4      # 무료: 월 4장
 PRO_PAGE_LIMIT = 500     # PRO: 월 500장 (원가 안전선)
 
+# ============================================================
+# 💳 LemonSqueezy 구독 동기화 (결제 완료 → PRO 자동 전환)
+#    - 웹훅 대신 API 조회 방식 (Streamlit 친화적)
+#    - 활성 구독이 있으면 PRO, 없으면 FREE 로 동기화 (ADMIN은 절대 변경 안 함)
+# ============================================================
+LEMONSQUEEZY_API_KEY = get_secret("LEMONSQUEEZY_API_KEY")
+
+def _ls_has_active_subscription(email: str) -> bool:
+    """해당 이메일에 유효한(권한 부여 대상) 구독이 있는지 LemonSqueezy API로 조회."""
+    if not LEMONSQUEEZY_API_KEY or not email:
+        return False
+    import urllib.request, urllib.parse, json as _json
+    from datetime import datetime, timezone
+
+    url = "https://api.lemonsqueezy.com/v1/subscriptions?" + urllib.parse.urlencode(
+        {"filter[user_email]": email}
+    )
+    req = urllib.request.Request(url, headers={
+        "Accept": "application/vnd.api+json",
+        "Content-Type": "application/vnd.api+json",
+        "Authorization": f"Bearer {LEMONSQUEEZY_API_KEY}",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        # 조회 실패 시 기존 상태를 함부로 바꾸지 않도록 False가 아닌 None 의미로 예외 처리
+        raise
+
+    now = datetime.now(timezone.utc)
+    for sub in data.get("data", []):
+        attr = sub.get("attributes", {})
+        status = attr.get("status")
+        # 권한 부여: 활성/체험/연체(유예) 상태
+        if status in ("active", "on_trial", "past_due"):
+            return True
+        # 취소했지만 아직 이용 기간이 남은 경우
+        if status == "cancelled" and attr.get("ends_at"):
+            try:
+                ends = datetime.fromisoformat(attr["ends_at"].replace("Z", "+00:00"))
+                if ends > now:
+                    return True
+            except Exception:
+                pass
+    return False
+
+
+def sync_plan_with_lemonsqueezy(email: str, current_plan: str) -> str:
+    """구독 상태를 조회해 Supabase plan_type 을 PRO↔FREE 로 동기화. ADMIN은 건드리지 않음."""
+    if current_plan == "ADMIN":
+        return current_plan
+    if not LEMONSQUEEZY_API_KEY or not email:
+        return current_plan
+    try:
+        active = _ls_has_active_subscription(email)
+    except Exception:
+        # API 오류 시 현재 상태 유지 (강등/승급 모두 보류)
+        return current_plan
+
+    desired = "PRO" if active else "FREE"
+    if desired != current_plan:
+        try:
+            supabase.table("users").update({"plan_type": desired}).eq("email", email).execute()
+            st.session_state["user"]["plan_type"] = desired
+        except Exception:
+            return current_plan
+    return desired
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🔑 Gemini API 키 풀 (라운드로빈 + cooldown 자동 fallback)
 # - 단일 키: GEMINI_API_KEY (기존 호환)
@@ -1246,6 +1314,20 @@ if st.query_params.get("page") == "admin":
 # ============================================================
 user_data = st.session_state.get("user", {})
 
+# 💳 구독 상태 동기화 (세션당 1회 + 5분 스로틀로 과도한 API 호출 방지)
+#    결제 직후 즉시 반영이 필요하면 사이드바의 "구독 상태 새로고침" 버튼 사용
+def _maybe_sync_plan(force: bool = False):
+    import time as _t
+    last = st.session_state.get("_last_sub_sync", 0)
+    if force or (_t.time() - last > 300):
+        new_plan = sync_plan_with_lemonsqueezy(
+            user_data.get("email", ""), user_data.get("plan_type", "FREE")
+        )
+        user_data["plan_type"] = new_plan
+        st.session_state["_last_sub_sync"] = _t.time()
+
+_maybe_sync_plan()
+
 with st.sidebar:
     st.markdown(f"**👤 계정**: {user_data.get('email', '')}")
     st.markdown(f"**💳 플랜**: {user_data.get('plan_type', '')}")
@@ -1275,6 +1357,12 @@ with st.sidebar:
 
     if st.button("💎 플랜 업그레이드", use_container_width=True):
         show_pricing_modal()
+
+    # 결제 직후 PRO 반영이 안 보이면 즉시 재조회
+    if user_data.get('plan_type') != 'ADMIN':
+        if st.button("🔄 구독 상태 새로고침", use_container_width=True):
+            _maybe_sync_plan(force=True)
+            st.rerun()
 
     if st.button("로그아웃", use_container_width=True):
         # 🧹 로그아웃 시 모든 세션 데이터 + 외부 캐시 완전 정리
