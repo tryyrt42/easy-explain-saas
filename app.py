@@ -1461,6 +1461,16 @@ with st.sidebar:
         )
         st.progress(_ratio)
 
+        # PRO 유저: 다음 갱신일 표시 (Make가 저장한 next_renewal 값이 있을 때만)
+        if user_data.get('plan_type') == 'PRO':
+            _renew = _parse_dt(user_data.get('next_renewal'))
+            if _renew:
+                st.markdown(
+                    f"<span style='color:#94a3b8; font-size:0.85rem;'>"
+                    f"🔄 다음 갱신일: {_renew.strftime('%Y-%m-%d')}</span>",
+                    unsafe_allow_html=True,
+                )
+
     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
 
     if st.button("💎 플랜 업그레이드", use_container_width=True):
