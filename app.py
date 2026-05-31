@@ -1253,14 +1253,19 @@ if st.session_state.get("user") is None:
     st.stop() 
 
 # ============================================================
-# 📊 관리자 통계 (?page=admin) — 로그인 + ADMIN 플랜만 접근 가능
+# 📊 관리자 통계 — 로그인 + ADMIN 플랜만 접근 (사이드바 버튼으로 토글)
+#    URL 파라미터 대신 세션 플래그를 써서 로그인 세션이 끊기지 않게 함
 #    이 지점은 로그인 게이트(st.stop)를 통과한 뒤라 항상 로그인 상태임
 # ============================================================
-if st.query_params.get("page") == "admin":
+if st.session_state.get("show_admin_stats"):
     _me = st.session_state.get("user", {})
     if _me.get("plan_type") != "ADMIN":
         st.error("🚫 접근 권한이 없습니다. 관리자 전용 페이지입니다.")
         st.stop()
+
+    if st.button("← 통계 닫기"):
+        st.session_state["show_admin_stats"] = False
+        st.rerun()
 
     st.title("📊 Easy-Easy 관리자 통계")
     try:
@@ -1309,7 +1314,6 @@ if st.query_params.get("page") == "admin":
     else:
         st.info("아직 유저 데이터가 없습니다.")
 
-    st.caption("← 통계 페이지를 닫으려면 주소창에서 ?page=admin 을 지우고 새로고침하세요.")
     st.stop()
 
 # ============================================================
@@ -1351,6 +1355,12 @@ with st.sidebar:
 
     if st.button("💎 플랜 업그레이드", use_container_width=True):
         show_pricing_modal()
+
+    # 관리자 전용: 통계 화면 토글 (URL 안 건드려서 세션 안 끊김)
+    if user_data.get('plan_type') == 'ADMIN':
+        if st.button("📊 관리자 통계", use_container_width=True):
+            st.session_state["show_admin_stats"] = True
+            st.rerun()
 
     if st.button("로그아웃", use_container_width=True):
         # 🧹 로그아웃 시 모든 세션 데이터 + 외부 캐시 완전 정리
