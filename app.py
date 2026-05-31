@@ -849,7 +849,7 @@ def show_pricing_modal():
         with st.container(height=420, border=True):
             st.subheader("PRO (인기)")
             st.markdown("## ₩ 9,900 / 월")
-            st.markdown("""<div style='min-height: 180px; color: #94a3b8;'>✔️ <b>월 500장 해석 제공</b><br>✔️ 1타 강사 / 비유 모드 완벽 지원<br>✔️ 한도 초과 스트레스 없는 쾌적함</div>""", unsafe_allow_html=True)
+            st.markdown("""<div style='min-height: 180px; color: #94a3b8;'>✔️ <b>월 500장 해석 제공</b><br>✔️ 4가지 모드 완벽 지원<br>✔️ 한도 초과 스트레스 없는 쾌적함</div>""", unsafe_allow_html=True)
             BASE_CHECKOUT_LINK = get_secret(
                 "LEMONSQUEEZY_CHECKOUT_URL",
                 "https://easy-explain-saas.lemonsqueezy.com/checkout/buy/7a87b27c-335a-42c9-9995-54eb03fb49a3"
