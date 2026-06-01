@@ -496,6 +496,39 @@ def increment_mode_stat(mode: str):
         # mode_stats 테이블이 없거나 일시 오류면 조용히 통과 (해석 자체는 정상 진행)
         pass
 
+
+def get_mode_count(mode: str) -> int:
+    """mode_stats 의 특정 행(일반 모드 or '_'-특수행) count 단건 조회. 없으면 0."""
+    if not mode:
+        return 0
+    try:
+        res = supabase.table("mode_stats").select("count").eq("mode", mode).execute()
+        if res.data:
+            return int(res.data[0].get("count", 0) or 0)
+    except Exception:
+        pass
+    return 0
+
+
+def add_pages_billed(pages: int):
+    """💸 청구 대상(실고객) 누적 페이지 카운터.
+    - mode_stats 의 특수행 '_pages_billed' 에 pages 만큼 누적.
+    - 반드시 ADMIN 제외 후 호출할 것 (호출부의 `if not is_admin` 안).
+    - used_pages 와 달리 결제 주기 리셋의 영향을 안 받는 '진짜 누적' → 원가 집계용.
+    """
+    if not pages or pages <= 0:
+        return
+    try:
+        res = supabase.table("mode_stats").select("count").eq("mode", "_pages_billed").execute()
+        if res.data:
+            new_count = int(res.data[0].get("count", 0) or 0) + pages
+            supabase.table("mode_stats").update({"count": new_count}).eq("mode", "_pages_billed").execute()
+        else:
+            supabase.table("mode_stats").insert({"mode": "_pages_billed", "count": pages}).execute()
+    except Exception:
+        # 일시 오류면 조용히 통과 (해석 자체는 정상 진행)
+        pass
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🔑 Gemini API 키 풀 (라운드로빈 + cooldown 자동 fallback)
 # - 단일 키: GEMINI_API_KEY (기존 호환)
@@ -1312,13 +1345,37 @@ if st.session_state.get("show_admin_stats"):
     c5.metric("PRO", f"{pro_n}명")
     c6.metric("ADMIN", f"{admin_n}명")
 
-    # 추정 API 원가 (장당 단가 3종 기준)
+    # 추정 API 원가 — 청구 대상 누적 페이지(ADMIN 제외, 결제주기 리셋 무관) 기준
+    billed_pages = get_mode_count("_pages_billed")
     st.subheader("💸 추정 누적 API 원가")
-    st.caption("총 해석 페이지 × 장당 단가. 실제 비용은 문서 난이도에 따라 이 범위 안에서 결정됩니다.")
+    st.caption(
+        f"청구 대상 누적 {billed_pages:,}장 × 장당 단가 (ADMIN 제외, 리셋 시점 이후 집계). "
+        "실제 비용은 문서 난이도에 따라 이 범위 안에서 결정됩니다."
+    )
     cc1, cc2, cc3 = st.columns(3)
-    cc1.metric("평균 (7원/장)", f"{total_pages * 7:,}원")
-    cc2.metric("중간 (10원/장)", f"{total_pages * 10:,}원")
-    cc3.metric("보수적 (18원/장)", f"{total_pages * 18:,}원")
+    cc1.metric("평균 (7원/장)", f"{billed_pages * 7:,}원")
+    cc2.metric("중간 (10원/장)", f"{billed_pages * 10:,}원")
+    cc3.metric("보수적 (18원/장)", f"{billed_pages * 18:,}원")
+
+    # 추정 누적 API 원가 리셋 (2단계 확인 — '_pages_billed' 행만 0으로, 유저 쿼터/used_pages 무관)
+    if not st.session_state.get("confirm_cost_reset"):
+        if st.button("🔄 추정 누적 API 원가 리셋", key="cost_reset_btn"):
+            st.session_state["confirm_cost_reset"] = True
+            st.rerun()
+    else:
+        st.warning("⚠️ 청구 대상 누적 페이지를 0으로 초기화합니다. (유저 쿼터·used_pages는 안 건드림) 되돌릴 수 없습니다.")
+        _cok3, _ccancel3 = st.columns(2)
+        if _cok3.button("✅ 확인, 리셋", key="cost_reset_confirm"):
+            try:
+                supabase.table("mode_stats").update({"count": 0}).eq("mode", "_pages_billed").execute()
+                st.session_state["confirm_cost_reset"] = False
+                st.success("추정 누적 API 원가를 초기화했습니다.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"리셋 실패: {e}")
+        if _ccancel3.button("취소", key="cost_reset_cancel"):
+            st.session_state["confirm_cost_reset"] = False
+            st.rerun()
 
     # 모드별 사용량 (전체 유저 합산)
     st.subheader("🎯 모드별 사용량")
@@ -2298,8 +2355,10 @@ def run_interpretation(text, mode, cache_key, pages_used=1):
             supabase.table("users").update({"used_pages": new_used}).eq("email", current_user.get('email')).execute()
             st.session_state["user"]['used_pages'] = new_used
 
-        # 📊 모드 사용 통계 +1 (전체 유저 합산)
-        increment_mode_stat(mode)
+            # 📊 모드 사용 통계 +1 (실고객만 — ADMIN 테스트는 제외)
+            increment_mode_stat(mode)
+            # 💸 청구 대상 누적 페이지 (원가 집계용 — ADMIN 제외)
+            add_pages_billed(pages_used)
 
         st.session_state["interpret_cache"][cache_key] = response.text
         return True
