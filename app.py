@@ -392,11 +392,26 @@ SUPABASE_KEY = get_secret("SUPABASE_KEY")
 
 # 🔑 클라이언트를 캐싱해야 OAuth(PKCE)의 code_verifier가 rerun 사이에 유지됨.
 # (매 rerun마다 create_client 하면 verifier가 사라져서 구글 로그인 콜백이 실패함)
+#
+# ⚠️ 클라이언트를 2개로 분리한다:
+#  - supabase      : DB 전용(service_role). .table() 작업에만 사용. auth 호출 절대 금지.
+#                    auth 흐름을 안 거치므로 service_role 권한을 잃지 않아 → RLS 켜도 통과.
+#  - supabase_auth : 인증 전용. sign_in_with_oauth / exchange_code_for_session /
+#                    sign_in_with_otp / verify_otp 등 .auth.* 호출만 담당.
+#                    로그인하면서 유저 토큰을 갖게 되지만, .table()에는 절대 안 써서 무해.
+# 이렇게 분리해야 "로그인하면 클라이언트가 service_role을 잃고 유저 토큰으로 바뀌어
+# RLS에 막히는" 문제(42501)가 사라진다.
 @st.cache_resource
 def get_supabase_client() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
+@st.cache_resource
+def get_supabase_auth_client() -> Client:
+    # 인증 전용 클라이언트 (PKCE verifier 유지를 위해 마찬가지로 캐싱)
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
 supabase: Client = get_supabase_client()
+supabase_auth: Client = get_supabase_auth_client()
 GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
 MODEL_NAME = "gemini-3.1-flash-lite"
 SITE_URL = get_secret("SITE_URL", "https://easy-easy-78wv.onrender.com")
@@ -809,7 +824,7 @@ def parse_docx(docx_bytes):
 if st.session_state.get("user") is None and "code" in st.query_params:
     try:
         code = st.query_params["code"]
-        session_resp = supabase.auth.exchange_code_for_session({"auth_code": code})
+        session_resp = supabase_auth.auth.exchange_code_for_session({"auth_code": code})
         auth_user = session_resp.user if session_resp else None
         # 이메일이 있으면 이메일로 식별 (구글),
         # 없으면 Supabase UUID 기반 합성 식별자 사용 (카카오 — 이메일 권한 없음)
@@ -1047,7 +1062,7 @@ if st.session_state.get("user") is None:
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             if st.button("🔵  Google 계정으로 로그인", use_container_width=True, key="google_login_btn"):
                 try:
-                    resp = supabase.auth.sign_in_with_oauth({
+                    resp = supabase_auth.auth.sign_in_with_oauth({
                         "provider": "google",
                         "options": {"redirect_to": SITE_URL},
                     })
@@ -1061,7 +1076,7 @@ if st.session_state.get("user") is None:
 
             if st.button("🟡  카카오 계정으로 로그인", use_container_width=True, key="kakao_login_btn"):
                 try:
-                    resp = supabase.auth.sign_in_with_oauth({
+                    resp = supabase_auth.auth.sign_in_with_oauth({
                         "provider": "kakao",
                         "options": {
                             "redirect_to": SITE_URL,
@@ -1120,7 +1135,7 @@ if st.session_state.get("user") is None:
                         try:
                             with st.spinner("📨 인증 코드 발송 중..."):
                                 # Supabase Auth로 OTP 발송 (기본 이메일 서비스 사용)
-                                supabase.auth.sign_in_with_otp({
+                                supabase_auth.auth.sign_in_with_otp({
                                     "email": email_input.strip(),
                                     "options": {"should_create_user": True}
                                 })
@@ -1160,7 +1175,7 @@ if st.session_state.get("user") is None:
                 if st.button("인증 코드 재전송", use_container_width=True, key="resend_otp"):
                     try:
                         with st.spinner("재전송 중..."):
-                            supabase.auth.sign_in_with_otp({
+                            supabase_auth.auth.sign_in_with_otp({
                                 "email": st.session_state["pending_email"],
                                 "options": {"should_create_user": True}
                             })
@@ -1185,7 +1200,7 @@ if st.session_state.get("user") is None:
                         try:
                             with st.spinner("🔐 인증 중..."):
                                 # Supabase Auth OTP 검증
-                                auth_response = supabase.auth.verify_otp({
+                                auth_response = supabase_auth.auth.verify_otp({
                                     "email": st.session_state["pending_email"],
                                     "token": otp_input.strip(),
                                     "type": "email"
